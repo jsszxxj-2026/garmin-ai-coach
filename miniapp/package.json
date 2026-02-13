@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "scripts": {
     "dev:weapp": "taro build --type weapp --watch",
-    "build:weapp": "taro build --type weapp"
+    "build:weapp": "taro build --type weapp",
+    "test": "vitest run"
   },
   "dependencies": {
     "@tarojs/components": "^3.6.31",
@@ -26,6 +27,7 @@
     "@tarojs/webpack5-runner": "^3.6.31",
     "babel-preset-taro": "^3.6.31",
     "sass": "^1.71.1",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0"
   }
 }
