@@ -49,6 +49,9 @@ backend/app/data/mock_garmin.json
 *.log
 logs/
 
+# Worktrees
+.worktrees/
+
 # OS
 .DS_Store
 Thumbs.db
