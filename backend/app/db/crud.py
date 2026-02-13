@@ -16,8 +16,12 @@ from backend.app.db.models import (
     ActivityLap,
     DailyAnalysis,
     GarminDailySummary,
+    GarminCredential,
+    NotificationLog,
+    SyncState,
     TrainingPlan,
     User,
+    WechatUser,
 )
 
 
@@ -85,6 +89,89 @@ def get_or_create_user(db: Session, *, garmin_email: str) -> User:
     db.add(user)
     db.flush()
     return user
+
+
+def get_or_create_wechat_user(db: Session, *, openid: str, unionid: Optional[str] = None) -> WechatUser:
+    user = db.query(WechatUser).filter(WechatUser.openid == openid).one_or_none()
+    if user:
+        if unionid and user.unionid != unionid:
+            user.unionid = unionid
+        return user
+    user = WechatUser(openid=openid, unionid=unionid)
+    db.add(user)
+    db.flush()
+    return user
+
+
+def get_garmin_credential(db: Session, *, wechat_user_id: int) -> Optional[GarminCredential]:
+    return (
+        db.query(GarminCredential)
+        .filter(GarminCredential.wechat_user_id == wechat_user_id)
+        .one_or_none()
+    )
+
+
+def upsert_garmin_credential(
+    db: Session,
+    *,
+    wechat_user_id: int,
+    garmin_email: str,
+    garmin_password: str,
+    is_cn: bool,
+) -> GarminCredential:
+    existing = (
+        db.query(GarminCredential)
+        .filter(GarminCredential.wechat_user_id == wechat_user_id)
+        .filter(GarminCredential.garmin_email == garmin_email)
+        .one_or_none()
+    )
+    fields = {
+        "garmin_email": garmin_email,
+        "garmin_password": garmin_password,
+        "is_cn": 1 if is_cn else 0,
+    }
+    if existing:
+        for k, v in fields.items():
+            setattr(existing, k, v)
+        return existing
+    row = GarminCredential(wechat_user_id=wechat_user_id, **fields)
+    db.add(row)
+    db.flush()
+    return row
+
+
+def get_or_create_sync_state(db: Session, *, wechat_user_id: int) -> SyncState:
+    state = (
+        db.query(SyncState)
+        .filter(SyncState.wechat_user_id == wechat_user_id)
+        .one_or_none()
+    )
+    if state:
+        return state
+    state = SyncState(wechat_user_id=wechat_user_id)
+    db.add(state)
+    db.flush()
+    return state
+
+
+def log_notification(
+    db: Session,
+    *,
+    wechat_user_id: int,
+    event_type: str,
+    event_key: str,
+    status: Optional[str] = None,
+    error_message: Optional[str] = None,
+) -> NotificationLog:
+    row = NotificationLog(
+        wechat_user_id=wechat_user_id,
+        event_type=event_type,
+        event_key=event_key,
+        status=status,
+        error_message=error_message,
+    )
+    db.add(row)
+    return row
 
 
 def get_cached_analysis(db: Session, *, user_id: int, analysis_date: date) -> Optional[DailyAnalysis]:
