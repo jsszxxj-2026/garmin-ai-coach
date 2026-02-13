@@ -14,6 +14,7 @@ from backend.app.db.crud import (
     upsert_garmin_credential,
 )
 from backend.app.db.session import get_db
+from backend.app.services.chat_service import ChatService
 from backend.app.services.garmin_client import GarminClient
 from backend.app.utils.crypto import encrypt_text
 from src.core.config import settings
@@ -49,6 +50,15 @@ class GarminProfileResponse(BaseModel):
     has_binding: bool
     garmin_email: Optional[str] = None
     is_cn: Optional[bool] = None
+
+
+class ChatRequest(BaseModel):
+    openid: str
+    message: str
+
+
+class ChatResponse(BaseModel):
+    reply: str
 
 
 class GarminUnbindRequest(BaseModel):
@@ -138,3 +148,11 @@ def get_profile(openid: str, db: Session = Depends(get_db)) -> GarminProfileResp
         garmin_email=credential.garmin_email,
         is_cn=bool(credential.is_cn),
     )
+
+
+@router.post("/chat", response_model=ChatResponse)
+def chat(payload: ChatRequest, db: Session = Depends(get_db)) -> ChatResponse:
+    _ = get_or_create_wechat_user(db, openid=payload.openid)
+    service = ChatService()
+    reply = service.reply(db=db, message=payload.message)
+    return ChatResponse(reply=reply)
