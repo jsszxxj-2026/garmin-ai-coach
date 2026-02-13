@@ -1,0 +1,70 @@
+.loading {
+  padding: 32px 24px;
+  text-align: center;
+}
+
+.loading-text {
+  font-size: 28px;
+  color: #5f6b7a;
+}
+
+.error {
+  padding: 32px 24px;
+  text-align: center;
+}
+
+.error-text {
+  display: block;
+  font-size: 28px;
+  color: #d14343;
+  margin-bottom: 16px;
+}
+
+.error-button {
+  background: #2f6fed;
+  color: #ffffff;
+  font-size: 26px;
+}
+
+.stat-card {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 8px 24px rgba(31, 41, 55, 0.08);
+}
+
+.stat-title {
+  display: block;
+  font-size: 24px;
+  color: #5f6b7a;
+  margin-bottom: 12px;
+}
+
+.stat-body {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.stat-value {
+  font-size: 40px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.stat-unit {
+  font-size: 22px;
+  color: #9aa4b2;
+}
+
+.markdown {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.markdown-paragraph {
+  font-size: 26px;
+  color: #1f2937;
+  line-height: 1.7;
+}
