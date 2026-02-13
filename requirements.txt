@@ -13,6 +13,7 @@ garminconnect==0.2.8
 
 # LLM integration
 google-generativeai==0.8.6
+apscheduler==3.10.4
 
 # Database (MySQL + SQLAlchemy)
 SQLAlchemy==2.0.23
