@@ -28,6 +28,7 @@ from pydantic import BaseModel
 
 from sqlalchemy.orm import Session
 
+from backend.app.api.wechat import router as wechat_router
 from backend.app.services.garmin_client import GarminClient
 from backend.app.services.data_processor import DataProcessor
 from backend.app.services.gemini_service import GeminiService
@@ -53,6 +54,8 @@ app = FastAPI(
     description="基于 Garmin 数据和 AI 的跑步教练分析服务",
     version="1.0.0",
 )
+
+app.include_router(wechat_router)
 
 
 @app.on_event("startup")
