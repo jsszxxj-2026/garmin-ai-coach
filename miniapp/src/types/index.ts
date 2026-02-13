@@ -2,6 +2,11 @@ export type DailyAnalysisResponse = {
   date: string
   raw_data_summary: string
   ai_advice: string
+  summary?: {
+    sleep?: number | null
+    battery?: number | null
+    stress?: number | null
+  }
   charts?: {
     labels: string[]
     paces: number[]
