@@ -35,6 +35,14 @@ def detect_new_data(sync_state: Dict[str, Any], latest: Dict[str, Any]) -> bool:
     return False
 
 
+def build_template_data(report_date: str, summary: str) -> Dict[str, Dict[str, str]]:
+    return {
+        "thing1": {"value": "AI 跑步日报"},
+        "date2": {"value": report_date},
+        "thing3": {"value": summary},
+    }
+
+
 def _build_latest_snapshot() -> Dict[str, Any]:
     now_date = datetime.now().date().isoformat()
     return {
@@ -81,9 +89,10 @@ def poll_garmin_for_user(
 
     event_key = f"daily:{analysis_date}"
     try:
+        summary = result.get("ai_advice") or "报告已生成"
         wechat_service.send_subscribe_message(
             openid=wechat_user.openid,
-            data={},
+            data=build_template_data(analysis_date, summary[:30]),
         )
         log_notification(
             db,
