@@ -32,17 +32,7 @@ from backend.app.api.wechat import router as wechat_router
 from backend.app.services.garmin_client import GarminClient
 from backend.app.services.data_processor import DataProcessor
 from backend.app.services.gemini_service import GeminiService
-from backend.app.db.crud import (
-    get_activities_by_date,
-    get_cached_analysis,
-    get_daily_summary_by_date,
-    get_or_create_user,
-    get_training_plans_in_range,
-    save_analysis,
-    upsert_activities,
-    upsert_daily_summary,
-    upsert_training_plans,
-)
+from backend.app.services.report_service import ReportService
 from backend.app.db.session import get_db_optional, init_db
 from src.services.garmin_service import GarminService
 from src.core.config import settings
@@ -141,6 +131,13 @@ def get_gemini_service() -> GeminiService:
     if _gemini_singleton is None:
         _gemini_singleton = GeminiService()
     return _gemini_singleton
+
+
+def get_report_service(
+    processor: DataProcessor = Depends(get_data_processor),
+    gemini: GeminiService = Depends(get_gemini_service),
+) -> ReportService:
+    return ReportService(processor=processor, gemini=gemini)
 
 
 _gemini_singleton: Optional[GeminiService] = None
@@ -301,8 +298,7 @@ async def get_daily_analysis(
     target_date: Optional[str] = None,
     force_refresh: bool = False,
     db: Optional[Session] = Depends(get_db_optional),
-    processor: DataProcessor = Depends(get_data_processor),
-    gemini: GeminiService = Depends(get_gemini_service),
+    report_service: ReportService = Depends(get_report_service),
 ):
     """
     获取每日训练分析和 AI 教练建议。
@@ -323,8 +319,6 @@ async def get_daily_analysis(
     Returns:
         DailyAnalysisResponse: 包含日期、原始数据摘要和 AI 建议
     """
-    # 记录请求开始
-    request_start_time = time.time()
     logger.info(f"[API] 收到分析请求: date={target_date or 'default'}")
     
     # 确定目标日期（Mock Mode 默认使用 2026-01-01）
@@ -342,276 +336,14 @@ async def get_daily_analysis(
         # Mock Mode 默认使用 2026-01-01（有完整的 20km 跑步数据）
         analysis_date = "2026-01-01" if USE_MOCK_MODE else date.today().isoformat()
 
-    analysis_date_obj = datetime.strptime(analysis_date, "%Y-%m-%d").date()
-
-    # ========== DB Cache ==========
-    db_user_id: Optional[int] = None
-    cache_hours = max(int(settings.ANALYSIS_CACHE_HOURS), 0)
-    if db is not None:
-        try:
-            user = get_or_create_user(db, garmin_email=settings.GARMIN_EMAIL)
-            db_user_id = user.id
-            if not force_refresh:
-                cached = get_cached_analysis(db, user_id=db_user_id, analysis_date=analysis_date_obj)
-                if cached is not None:
-                    is_fresh = (
-                        cache_hours > 0
-                        and cached.generated_at is not None
-                        and (datetime.utcnow() - cached.generated_at) <= timedelta(hours=cache_hours)
-                    )
-                    if is_fresh:
-                        logger.info(f"[DB] Fresh analysis cache hit for {analysis_date}")
-                        return DailyAnalysisResponse(
-                            date=analysis_date,
-                            raw_data_summary=cached.raw_data_summary_md,
-                            ai_advice=cached.ai_advice_md,
-                            charts=cached.charts_json,
-                        )
-                    logger.info(f"[DB] Analysis cache stale for {analysis_date}, rebuilding")
-        except Exception as e:
-            logger.warning(f"[DB] Cache lookup failed, continuing without cache: {e}")
-            db_user_id = None
-    
     try:
-        # ========== 步骤 1: 获取数据 ==========
-        data_start_time = time.time()
-        raw_health: Optional[Dict[str, Any]] = None
-        raw_plan: List[Dict[str, Any]] = []
-        raw_activities_new: List[Dict[str, Any]] = []
-        data_source = "none"
-
-        # 优先从 DB 原始数据重建，减少 Garmin 请求频率
-        if not force_refresh and db is not None and db_user_id is not None:
-            try:
-                summary_row = get_daily_summary_by_date(db, user_id=db_user_id, summary_date=analysis_date_obj)
-                activity_rows = get_activities_by_date(db, user_id=db_user_id, activity_date=analysis_date_obj)
-                plan_rows = get_training_plans_in_range(
-                    db,
-                    user_id=db_user_id,
-                    start_date=analysis_date_obj,
-                    end_date=analysis_date_obj + timedelta(days=2),
-                )
-
-                if summary_row is not None:
-                    raw_health = summary_row.raw_json or {
-                        "date": analysis_date,
-                        "sleep_time_hours": summary_row.sleep_time_hours,
-                        "sleep_score": summary_row.sleep_score,
-                        "body_battery": summary_row.body_battery,
-                        "body_battery_charged": summary_row.body_battery_charged,
-                        "body_battery_drained": summary_row.body_battery_drained,
-                        "resting_heart_rate": summary_row.resting_heart_rate,
-                        "average_stress_level": summary_row.average_stress_level,
-                        "stress_qualifier": summary_row.stress_qualifier,
-                        "hrv_status": summary_row.hrv_status,
-                        "deep_sleep_seconds": summary_row.deep_sleep_seconds,
-                        "rem_sleep_seconds": summary_row.rem_sleep_seconds,
-                        "light_sleep_seconds": summary_row.light_sleep_seconds,
-                        "awake_sleep_seconds": summary_row.awake_sleep_seconds,
-                        "recovery_quality_percent": summary_row.recovery_quality_percent,
-                    }
-
-                for activity_row in activity_rows:
-                    raw_activities_new.append(activity_row.raw_json or _activity_to_new_format_from_db(activity_row))
-
-                for plan_row in plan_rows:
-                    raw_plan.append(
-                        plan_row.raw_json
-                        or {
-                            "date": plan_row.plan_date.isoformat(),
-                            "workoutName": plan_row.workout_name,
-                            "description": plan_row.description,
-                        }
-                    )
-
-                if raw_health or raw_activities_new or raw_plan:
-                    data_source = "db"
-                    logger.info(f"[DB] Using stored raw data for {analysis_date}")
-            except Exception as e:
-                logger.warning(f"[DB] Failed to load raw data, fallback to Garmin: {e}")
-
-        if data_source != "db":
-            if USE_MOCK_MODE:
-                # ========== Mock Mode: 从本地 JSON 文件读取数据 ==========
-                try:
-                    from backend.app.services.garmin_client import GarminClient as GC
-
-                    mock_client = GC.__new__(GC)
-                    mock_client.email = settings.GARMIN_EMAIL
-                    mock_client.password = settings.GARMIN_PASSWORD
-                    mock_client.is_cn = settings.GARMIN_IS_CN
-                    mock_client.client = None
-
-                    mock_activity, mock_health, mock_plan = mock_client.get_mock_data(analysis_date)
-                    raw_health = mock_health
-                    raw_plan = mock_plan or []
-                    if mock_activity:
-                        raw_activities_new = [mock_activity]
-                    data_source = "mock"
-                except Exception as e:
-                    logger.error(f"[API] Mock 数据读取失败: {str(e)}")
-                    raise HTTPException(
-                        status_code=500,
-                        detail=f"Mock 数据读取失败: {str(e)}"
-                    )
-            else:
-                # ========== 真实模式: 从 Garmin API 获取数据 ==========
-                garmin_client = get_garmin_client()
-                garmin_service = get_garmin_service()
-
-                try:
-                    daily_data = garmin_service.get_daily_data(analysis_date)
-                    activities = daily_data.get("activities") or []
-                    if activities:
-                        raw_activities_new = [a for a in activities if isinstance(a, dict)]
-                except Exception:
-                    raw_activities_new = []
-
-                try:
-                    health_data = garmin_client.get_health_stats(analysis_date)
-                    if health_data:
-                        raw_health = health_data
-                except Exception:
-                    raw_health = None
-
-                try:
-                    plan_data = garmin_client.get_training_plan(analysis_date, days=3)
-                    if plan_data:
-                        raw_plan = plan_data
-                except Exception:
-                    raw_plan = []
-
-                data_source = "garmin"
-
-        activity_md, health_md, plan_md, converted_activities = _build_context_from_raw(
-            processor=processor,
-            raw_activities_new=raw_activities_new,
-            raw_health=raw_health,
-            raw_plan=raw_plan,
+        result = report_service.build_daily_analysis(
+            wechat_user_id=None,
+            analysis_date=analysis_date,
+            force_refresh=force_refresh,
+            db=db,
         )
-
-        data_elapsed = time.time() - data_start_time
-        logger.info(f"[API] 数据获取完成，来源={data_source}，耗时 {data_elapsed:.2f}s")
-
-        # ========== DB: Persist normalized raw data ==========
-        if db is not None and db_user_id is not None and data_source in ("garmin", "mock"):
-            try:
-                if raw_health:
-                    upsert_daily_summary(db, user_id=db_user_id, health=raw_health, summary_date=analysis_date_obj)
-                if raw_activities_new:
-                    upsert_activities(db, user_id=db_user_id, activities=raw_activities_new, fallback_date=analysis_date_obj)
-                if raw_plan:
-                    upsert_training_plans(db, user_id=db_user_id, plans=raw_plan)
-                db.commit()
-            except Exception as e:
-                db.rollback()
-                logger.warning(f"[DB] Failed to persist raw data: {e}")
-        
-        # ========== 步骤 2: 清洗数据 ==========
-        cleaning_start_time = time.time()
-        # 使用 DataProcessor 将所有数据组合成完整的日报上下文
-        daily_context = processor.assemble_daily_report(
-            activity_md,
-            health_md,
-            plan_md,
-            activity_date=analysis_date,
-        )
-        
-        cleaning_elapsed = time.time() - cleaning_start_time
-        logger.info(f"[API] 数据清洗完成，耗时 {cleaning_elapsed:.2f}s")
-        
-        # 如果没有获取到任何数据
-        if not daily_context or daily_context.strip() == "暂无数据":
-            logger.warning(f"[API] 未获取到数据，返回空结果")
-
-            empty_ai_advice = "## 📊 分析结果\n\n**提示**: 今天还没有运动数据或健康数据。请确保 Garmin 设备已同步数据。"
-            if db is not None and db_user_id is not None:
-                try:
-                    save_analysis(
-                        db,
-                        user_id=db_user_id,
-                        analysis_date=analysis_date_obj,
-                        raw_data_summary_md="暂无数据",
-                        ai_advice_md=empty_ai_advice,
-                        charts_json=None,
-                        model_name=getattr(gemini, "model_name", None),
-                        status="no_data",
-                        error_message=None,
-                    )
-                    db.commit()
-                except Exception as e:
-                    db.rollback()
-                    logger.warning(f"[DB] Failed to persist empty analysis: {e}")
-
-            return DailyAnalysisResponse(
-                date=analysis_date,
-                raw_data_summary="暂无数据",
-                ai_advice=empty_ai_advice,
-                charts=None,
-            )
-        
-        # ========== 步骤 3: AI 分析 ==========
-        ai_start_time = time.time()
-        analysis_status = "success"
-        analysis_error: Optional[str] = None
-        try:
-            ai_advice = gemini.analyze_training(daily_context)
-            ai_elapsed = time.time() - ai_start_time
-            logger.info(f"[API] AI 分析完成，耗时 {ai_elapsed:.2f}s")
-        except Exception as e:
-            # AI 分析失败，返回友好的错误信息
-            logger.error(f"[API] AI 分析失败: {str(e)}")
-            analysis_status = "error"
-            analysis_error = str(e)
-            ai_advice = f"""## 📊 分析结果
-
-**抱歉，AI 分析暂时不可用**
-
-错误信息: {str(e)}
-
-**建议**: 请稍后重试，或检查网络连接。
-"""
-        
-        # ========== 步骤 4: 提取图表数据 ==========
-        charts_data: Optional[Dict[str, List]] = None
-        if converted_activities and len(converted_activities) > 0:
-            # 取第一个活动提取图表数据
-            first_activity = converted_activities[0]
-            try:
-                charts_data = processor.extract_chart_data(first_activity)
-            except Exception as e:
-                logger.warning(f"[API] 提取图表数据失败: {str(e)}")
-                charts_data = None
-
-        # ========== DB: Persist analysis result ==========
-        if db is not None and db_user_id is not None:
-            try:
-                save_analysis(
-                    db,
-                    user_id=db_user_id,
-                    analysis_date=analysis_date_obj,
-                    raw_data_summary_md=daily_context,
-                    ai_advice_md=ai_advice,
-                    charts_json=charts_data,
-                    model_name=getattr(gemini, "model_name", None),
-                    status=analysis_status,
-                    error_message=analysis_error,
-                )
-                db.commit()
-            except Exception as e:
-                db.rollback()
-                logger.warning(f"[DB] Failed to persist analysis: {e}")
-        
-        # ========== 步骤 5: 返回结果 ==========
-        total_elapsed = time.time() - request_start_time
-        logger.info(f"[API] 请求处理完毕，准备返回，总耗时 {total_elapsed:.2f}s")
-        logger.info(f"[API] 成功打包图表数据和AI建议")
-        return DailyAnalysisResponse(
-            date=analysis_date,
-            raw_data_summary=daily_context,
-            ai_advice=ai_advice,
-            charts=charts_data,
-        )
+        return DailyAnalysisResponse(**result)
     
     except HTTPException:
         # 重新抛出 HTTP 异常

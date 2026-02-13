@@ -1,0 +1,355 @@
+from __future__ import annotations
+
+import logging
+import time
+from datetime import date as date_type, datetime, timedelta
+from typing import Any, Dict, List, Optional
+
+from fastapi import HTTPException
+from sqlalchemy.orm import Session
+
+from backend.app.db.crud import (
+    get_activities_by_date,
+    get_cached_analysis,
+    get_daily_summary_by_date,
+    get_garmin_credential,
+    get_or_create_user,
+    get_training_plans_in_range,
+    save_analysis,
+    upsert_activities,
+    upsert_daily_summary,
+    upsert_training_plans,
+)
+from backend.app.services.data_processor import DataProcessor
+from backend.app.services.garmin_client import GarminClient
+from backend.app.services.gemini_service import GeminiService
+from backend.app.utils.crypto import decrypt_text
+from src.core.config import settings
+from src.services.garmin_service import GarminService
+
+
+logger = logging.getLogger(__name__)
+
+
+class ReportService:
+    def __init__(
+        self,
+        *,
+        processor: Optional[DataProcessor] = None,
+        gemini: Optional[GeminiService] = None,
+    ) -> None:
+        self.processor = processor or DataProcessor()
+        self.gemini = gemini or GeminiService()
+
+    def build_daily_analysis(
+        self,
+        *,
+        wechat_user_id: Optional[int],
+        analysis_date: str,
+        force_refresh: bool,
+        db: Optional[Session],
+    ) -> dict[str, Any]:
+        request_start_time = time.time()
+        analysis_date_obj = datetime.strptime(analysis_date, "%Y-%m-%d").date()
+
+        db_user_id: Optional[int] = None
+        cache_hours = max(int(settings.ANALYSIS_CACHE_HOURS), 0)
+        if db is not None:
+            try:
+                user = get_or_create_user(db, garmin_email=settings.GARMIN_EMAIL)
+                db_user_id = user.id
+                if not force_refresh:
+                    cached = get_cached_analysis(db, user_id=db_user_id, analysis_date=analysis_date_obj)
+                    if cached is not None:
+                        is_fresh = (
+                            cache_hours > 0
+                            and cached.generated_at is not None
+                            and (datetime.utcnow() - cached.generated_at) <= timedelta(hours=cache_hours)
+                        )
+                        if is_fresh:
+                            return {
+                                "date": analysis_date,
+                                "raw_data_summary": cached.raw_data_summary_md,
+                                "ai_advice": cached.ai_advice_md,
+                                "charts": cached.charts_json,
+                            }
+            except Exception as e:
+                logger.warning(f"[DB] Cache lookup failed, continuing without cache: {e}")
+                db_user_id = None
+
+        raw_health: Optional[Dict[str, Any]] = None
+        raw_plan: List[Dict[str, Any]] = []
+        raw_activities_new: List[Dict[str, Any]] = []
+        data_source = "none"
+
+        if not force_refresh and db is not None and db_user_id is not None:
+            try:
+                summary_row = get_daily_summary_by_date(db, user_id=db_user_id, summary_date=analysis_date_obj)
+                activity_rows = get_activities_by_date(db, user_id=db_user_id, activity_date=analysis_date_obj)
+                plan_rows = get_training_plans_in_range(
+                    db,
+                    user_id=db_user_id,
+                    start_date=analysis_date_obj,
+                    end_date=analysis_date_obj + timedelta(days=2),
+                )
+
+                if summary_row is not None:
+                    raw_health = summary_row.raw_json
+                for activity_row in activity_rows:
+                    raw_activities_new.append(activity_row.raw_json)
+                for plan_row in plan_rows:
+                    raw_plan.append(plan_row.raw_json)
+
+                if raw_health or raw_activities_new or raw_plan:
+                    data_source = "db"
+            except Exception as e:
+                logger.warning(f"[DB] Failed to load raw data, fallback to Garmin: {e}")
+
+        if data_source != "db":
+            if settings.USE_MOCK_MODE:
+                from backend.app.services.garmin_client import GarminClient as GC
+
+                mock_client = GC.__new__(GC)
+                mock_client.email = settings.GARMIN_EMAIL
+                mock_client.password = settings.GARMIN_PASSWORD
+                mock_client.is_cn = settings.GARMIN_IS_CN
+                mock_client.client = None
+
+                mock_activity, mock_health, mock_plan = mock_client.get_mock_data(analysis_date)
+                raw_health = mock_health
+                raw_plan = mock_plan or []
+                if mock_activity:
+                    raw_activities_new = [mock_activity]
+                data_source = "mock"
+            else:
+                if wechat_user_id is None:
+                    raise HTTPException(status_code=400, detail="缺少用户信息")
+                if db is None:
+                    raise HTTPException(status_code=500, detail="数据库不可用")
+
+                credential = get_garmin_credential(db, wechat_user_id=wechat_user_id)
+                if credential is None:
+                    raise HTTPException(status_code=404, detail="Garmin 未绑定")
+
+                garmin_password = decrypt_text(credential.garmin_password)
+                garmin_client = GarminClient(
+                    email=credential.garmin_email,
+                    password=garmin_password,
+                    is_cn=bool(credential.is_cn),
+                )
+                garmin_service = GarminService(credential.garmin_email, garmin_password)
+
+                try:
+                    daily_data = garmin_service.get_daily_data(analysis_date)
+                    activities = daily_data.get("activities") or []
+                    if activities:
+                        raw_activities_new = [a for a in activities if isinstance(a, dict)]
+                except Exception:
+                    raw_activities_new = []
+
+                try:
+                    health_data = garmin_client.get_health_stats(analysis_date)
+                    if health_data:
+                        raw_health = health_data
+                except Exception:
+                    raw_health = None
+
+                try:
+                    plan_data = garmin_client.get_training_plan(analysis_date, days=3)
+                    if plan_data:
+                        raw_plan = plan_data
+                except Exception:
+                    raw_plan = []
+
+                data_source = "garmin"
+
+        activity_md, health_md, plan_md, converted_activities = _build_context_from_raw(
+            processor=self.processor,
+            raw_activities_new=raw_activities_new,
+            raw_health=raw_health,
+            raw_plan=raw_plan,
+        )
+
+        if db is not None and db_user_id is not None and data_source in ("garmin", "mock"):
+            try:
+                if raw_health:
+                    upsert_daily_summary(db, user_id=db_user_id, health=raw_health, summary_date=analysis_date_obj)
+                if raw_activities_new:
+                    upsert_activities(db, user_id=db_user_id, activities=raw_activities_new, fallback_date=analysis_date_obj)
+                if raw_plan:
+                    upsert_training_plans(db, user_id=db_user_id, plans=raw_plan)
+                db.commit()
+            except Exception as e:
+                db.rollback()
+                logger.warning(f"[DB] Failed to persist raw data: {e}")
+
+        daily_context = self.processor.assemble_daily_report(
+            activity_md,
+            health_md,
+            plan_md,
+            activity_date=analysis_date,
+        )
+
+        if not daily_context or daily_context.strip() == "暂无数据":
+            empty_ai_advice = "## 📊 分析结果\n\n**提示**: 今天还没有运动数据或健康数据。请确保 Garmin 设备已同步数据。"
+            if db is not None and db_user_id is not None:
+                try:
+                    save_analysis(
+                        db,
+                        user_id=db_user_id,
+                        analysis_date=analysis_date_obj,
+                        raw_data_summary_md="暂无数据",
+                        ai_advice_md=empty_ai_advice,
+                        charts_json=None,
+                        model_name=getattr(self.gemini, "model_name", None),
+                        status="no_data",
+                        error_message=None,
+                    )
+                    db.commit()
+                except Exception as e:
+                    db.rollback()
+                    logger.warning(f"[DB] Failed to persist empty analysis: {e}")
+
+            return {
+                "date": analysis_date,
+                "raw_data_summary": "暂无数据",
+                "ai_advice": empty_ai_advice,
+                "charts": None,
+            }
+
+        analysis_status = "success"
+        analysis_error: Optional[str] = None
+        try:
+            ai_advice = self.gemini.analyze_training(daily_context)
+        except Exception as e:
+            analysis_status = "error"
+            analysis_error = str(e)
+            ai_advice = f"""## 📊 分析结果
+
+**抱歉，AI 分析暂时不可用**
+
+错误信息: {str(e)}
+
+**建议**: 请稍后重试，或检查网络连接。
+"""
+
+        charts_data: Optional[Dict[str, List]] = None
+        if converted_activities:
+            first_activity = converted_activities[0]
+            try:
+                charts_data = self.processor.extract_chart_data(first_activity)
+            except Exception as e:
+                logger.warning(f"[API] 提取图表数据失败: {str(e)}")
+                charts_data = None
+
+        if db is not None and db_user_id is not None:
+            try:
+                save_analysis(
+                    db,
+                    user_id=db_user_id,
+                    analysis_date=analysis_date_obj,
+                    raw_data_summary_md=daily_context,
+                    ai_advice_md=ai_advice,
+                    charts_json=charts_data,
+                    model_name=getattr(self.gemini, "model_name", None),
+                    status=analysis_status,
+                    error_message=analysis_error,
+                )
+                db.commit()
+            except Exception as e:
+                db.rollback()
+                logger.warning(f"[DB] Failed to persist analysis: {e}")
+
+        total_elapsed = time.time() - request_start_time
+        logger.info(f"[API] 请求处理完毕，准备返回，总耗时 {total_elapsed:.2f}s")
+        return {
+            "date": analysis_date,
+            "raw_data_summary": daily_context,
+            "ai_advice": ai_advice,
+            "charts": charts_data,
+        }
+
+
+def _convert_activity_for_processor(activity: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(activity, dict) or "metrics" not in activity:
+        return activity
+
+    metrics = activity.get("metrics") if isinstance(activity.get("metrics"), dict) else {}
+    distance_km = metrics.get("distance_km")
+    duration_s = metrics.get("duration_seconds")
+    distance_m = float(distance_km) * 1000.0 if isinstance(distance_km, (int, float)) else None
+
+    avg_speed_mps = None
+    if isinstance(distance_m, (int, float)) and isinstance(duration_s, (int, float)) and float(duration_s) > 0:
+        avg_speed_mps = float(distance_m) / float(duration_s)
+
+    converted: Dict[str, Any] = {
+        "type": activity.get("type"),
+        "activityName": activity.get("name"),
+        "distance": distance_m,
+        "duration": duration_s,
+        "averageHR": metrics.get("average_hr"),
+        "maxHR": metrics.get("max_hr"),
+        "averageSpeed": avg_speed_mps,
+        "startTimeLocal": activity.get("start_time_local") or activity.get("startTimeLocal") or "",
+    }
+
+    laps = activity.get("laps") if isinstance(activity.get("laps"), list) else []
+    splits: List[Dict[str, Any]] = []
+    for lap in laps:
+        if not isinstance(lap, dict):
+            continue
+        lap_distance_km = lap.get("distance_km")
+        lap_duration_s = lap.get("duration_seconds")
+        lap_distance_m = float(lap_distance_km) * 1000.0 if isinstance(lap_distance_km, (int, float)) else None
+
+        lap_speed_mps = None
+        if (
+            isinstance(lap_distance_m, (int, float))
+            and isinstance(lap_duration_s, (int, float))
+            and float(lap_duration_s) > 0
+        ):
+            lap_speed_mps = float(lap_distance_m) / float(lap_duration_s)
+
+        splits.append(
+            {
+                "lapIndex": lap.get("lap_index"),
+                "distance": lap_distance_m,
+                "duration": lap_duration_s,
+                "averageHR": lap.get("average_hr"),
+                "maxHR": lap.get("max_hr"),
+                "strideLength": lap.get("stride_length_cm"),
+                "groundContactTime": lap.get("ground_contact_time_ms"),
+                "verticalOscillation": lap.get("vertical_oscillation_cm"),
+                "verticalRatio": lap.get("vertical_ratio_percent"),
+                "averageRunCadence": lap.get("cadence"),
+                "averageSpeed": lap_speed_mps,
+            }
+        )
+
+    converted["splits"] = splits
+    return converted
+
+
+def _build_context_from_raw(
+    processor: DataProcessor,
+    raw_activities_new: List[Dict[str, Any]],
+    raw_health: Optional[Dict[str, Any]],
+    raw_plan: List[Dict[str, Any]],
+) -> tuple[Optional[str], Optional[str], Optional[str], List[Dict[str, Any]]]:
+    converted_activities = [_convert_activity_for_processor(a) for a in raw_activities_new]
+
+    activity_md: Optional[str] = None
+    if converted_activities:
+        simplified = [processor.simplify_activity(a) for a in converted_activities]
+        activity_md = processor.format_for_llm(simplified)
+
+    health_md: Optional[str] = None
+    if raw_health:
+        health_md = processor.format_health_summary(raw_health)
+
+    plan_md: Optional[str] = None
+    if raw_plan:
+        plan_md = processor.format_future_plan(raw_plan)
+
+    return activity_md, health_md, plan_md, converted_activities
