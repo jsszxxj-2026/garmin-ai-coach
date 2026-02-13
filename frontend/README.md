@@ -169,6 +169,16 @@ npm run build
 2. **CORS**：如果 API 在不同域名，需要配置 CORS
 3. **环境变量**：生产环境记得配置正确的 `VITE_API_BASE_URL`
 
+## 📱 小程序对接说明
+
+后端提供以下接口用于小程序：
+
+- `POST /api/wechat/login`（获取 openid）
+- `POST /api/wechat/bind-garmin`（绑定 Garmin 账号）
+- `POST /api/wechat/unbind-garmin`（解绑）
+- `GET /api/wechat/profile`（查询绑定状态）
+- `POST /api/wechat/chat`（对话入口）
+
 ## 🔗 相关链接
 
 - [React 文档](https://react.dev/)

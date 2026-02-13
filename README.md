@@ -43,6 +43,11 @@ cp .env.example .env
 
 4. Edit `.env` file with your actual credentials.
 
+   Multi-user (WeChat) configuration:
+   - WECHAT_MINI_APPID / WECHAT_MINI_SECRET
+   - WECHAT_SUBSCRIBE_TEMPLATE_ID / WECHAT_SUBSCRIBE_PAGE
+   - GARMIN_CRED_ENCRYPTION_KEY (Base64 or 32-byte key)
+
 5. Run the application:
 ```bash
 # 方式 1: 使用 uvicorn 运行（推荐）
@@ -60,6 +65,30 @@ python3 backend/app/main.py
 
 - API documentation will be available at `http://localhost:8000/docs`
 - Alternative docs at `http://localhost:8000/redoc`
+
+## WeChat Mini Program (Multi-user)
+
+### Binding flow
+
+1. Mini program login: `POST /api/wechat/login` with `code`.
+2. Bind Garmin: `POST /api/wechat/bind-garmin` with `openid`, `garmin_email`, `garmin_password`, `is_cn`.
+3. Query binding: `GET /api/wechat/profile?openid=...`.
+4. Unbind: `POST /api/wechat/unbind-garmin`.
+
+### Subscription message
+
+- Template fields used: `thing1`, `date2`, `thing3`.
+- The backend sends a summary when new data is detected.
+
+### Polling
+
+- Background scheduler runs every 30 minutes.
+- Entry point: `backend/app/jobs/scheduler.py` (`start_scheduler`).
+
+### Encryption
+
+- Garmin passwords are stored encrypted.
+- `GARMIN_CRED_ENCRYPTION_KEY` is required at runtime.
 
 ## Testing
 
