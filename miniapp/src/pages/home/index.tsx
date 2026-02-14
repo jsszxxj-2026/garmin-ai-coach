@@ -5,7 +5,7 @@ import Taro from '@tarojs/taro'
 import Error from '../../components/Error'
 import Loading from '../../components/Loading'
 import StatCard from '../../components/StatCard'
-import { bindGarmin, getDailyAnalysis, getProfile } from '../../api/coach'
+import { bindGarmin, getDailyAnalysis, getProfile, unbindGarmin } from '../../api/coach'
 import type { DailyAnalysisResponse, WechatProfileResponse } from '../../types'
 
 import './index.scss'
@@ -75,6 +75,16 @@ function Home() {
     }
   }
 
+  const handleUnbind = async () => {
+    try {
+      await unbindGarmin({ openid })
+      Taro.showToast({ title: '已解绑', icon: 'success' })
+      fetchData()
+    } catch (err) {
+      Taro.showToast({ title: '解绑失败', icon: 'none' })
+    }
+  }
+
   const handleAnalysis = () => {
     Taro.navigateTo({ url: '/pages/analysis/index' })
   }
@@ -100,7 +110,19 @@ function Home() {
         <Text className='subtitle'>今日概览与智能建议</Text>
       </View>
 
-      {!isBound ? (
+      {isBound ? (
+        <View className='bind-card'>
+          <Text className='bind-title'>Garmin 已绑定</Text>
+          <Text className='bind-desc'>如需更换账号，请先解绑再重新绑定</Text>
+          <Button
+            className='primary-button'
+            onClick={handleUnbind}
+            data-testid='unbind-rebind'
+          >
+            解绑/重新绑定
+          </Button>
+        </View>
+      ) : (
         <View className='bind-card'>
           <Text className='bind-title'>绑定 Garmin 账号</Text>
           <Text className='bind-desc'>绑定后可同步睡眠、体能电量与压力数据</Text>
@@ -139,7 +161,7 @@ function Home() {
             立即绑定
           </Button>
         </View>
-      ) : null}
+      )}
 
       {summaryItems.length ? (
         <View className='summary'>

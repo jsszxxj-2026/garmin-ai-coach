@@ -26,11 +26,17 @@ vi.mock('../src/api/coach', () => {
     getDailyAnalysis: vi.fn(),
     getProfile: vi.fn(),
     bindGarmin: vi.fn(),
+    unbindGarmin: vi.fn(),
   }
 })
 
 import Home from '../src/pages/home'
-import { bindGarmin, getDailyAnalysis, getProfile } from '../src/api/coach'
+import {
+  bindGarmin,
+  getDailyAnalysis,
+  getProfile,
+  unbindGarmin,
+} from '../src/api/coach'
 
 type TestNode = ReactTestRendererJSON
 
@@ -123,12 +129,14 @@ const flushPromises = async () => {
 const getDailyAnalysisMock = getDailyAnalysis as unknown as ReturnType<typeof vi.fn>
 const getProfileMock = getProfile as unknown as ReturnType<typeof vi.fn>
 const bindGarminMock = bindGarmin as unknown as ReturnType<typeof vi.fn>
+const unbindGarminMock = unbindGarmin as unknown as ReturnType<typeof vi.fn>
 
 describe('home page', () => {
   afterEach(() => {
     getDailyAnalysisMock.mockReset()
     getProfileMock.mockReset()
     bindGarminMock.mockReset()
+    unbindGarminMock.mockReset()
   })
 
   it('renders loading state', async () => {
@@ -255,5 +263,46 @@ describe('home page', () => {
       garmin_password: 'secret',
       is_cn: true,
     })
+  })
+
+  it('shows rebind action when bound and refreshes to show form', async () => {
+    getDailyAnalysisMock.mockResolvedValue({
+      date: '2024-01-01',
+      raw_data_summary: 'ok',
+      ai_advice: 'ok',
+    })
+    getProfileMock
+      .mockResolvedValueOnce({
+        openid: 'openid-1',
+        has_binding: true,
+      })
+      .mockResolvedValueOnce({
+        openid: 'openid-1',
+        has_binding: false,
+      })
+    unbindGarminMock.mockResolvedValue({ unbound: true })
+
+    const renderer = create(<Home />)
+    await act(async () => {
+      await flushPromises()
+    })
+    await act(async () => {
+      await flushPromises()
+    })
+
+    const rebindButton = renderer.root.findByProps({
+      'data-testid': 'unbind-rebind',
+    })
+
+    await act(async () => {
+      rebindButton.props.onClick()
+      await flushPromises()
+    })
+
+    expect(unbindGarminMock).toHaveBeenCalledWith({ openid: 'local-openid' })
+    const emailInput = renderer.root.findByProps({
+      'data-testid': 'garmin-email-input',
+    })
+    expect(emailInput).toBeTruthy()
   })
 })

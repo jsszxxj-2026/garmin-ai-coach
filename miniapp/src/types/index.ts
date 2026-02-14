@@ -35,6 +35,14 @@ export type WechatBindGarminResponse = {
   bound: boolean
 }
 
+export type WechatUnbindGarminRequest = {
+  openid: string
+}
+
+export type WechatUnbindGarminResponse = {
+  unbound: boolean
+}
+
 export type WechatProfileResponse = {
   openid: string
   has_binding: boolean

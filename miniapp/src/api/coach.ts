@@ -8,6 +8,8 @@ import type {
   WechatLoginRequest,
   WechatLoginResponse,
   WechatProfileResponse,
+  WechatUnbindGarminRequest,
+  WechatUnbindGarminResponse,
 } from '../types'
 
 export const getDailyAnalysis = async () => {
@@ -26,6 +28,10 @@ export const loginWechat = async (payload: WechatLoginRequest) => {
 
 export const bindGarmin = async (payload: WechatBindGarminRequest) => {
   return apiClient.post<WechatBindGarminResponse>('/api/wechat/bind-garmin', payload)
+}
+
+export const unbindGarmin = async (payload: WechatUnbindGarminRequest) => {
+  return apiClient.post<WechatUnbindGarminResponse>('/api/wechat/unbind-garmin', payload)
 }
 
 export const getProfile = async (openid: string) => {
