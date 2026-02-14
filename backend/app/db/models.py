@@ -70,9 +70,10 @@ class WechatUser(Base):
         back_populates="wechat_user",
         cascade="all, delete-orphan",
     )
-    home_summaries: Mapped[list[HomeSummary]] = relationship(
+    home_summary: Mapped[Optional[HomeSummary]] = relationship(
         back_populates="wechat_user",
         cascade="all, delete-orphan",
+        uselist=False,
     )
 
 
@@ -162,6 +163,7 @@ class HomeSummary(Base):
     month_stats_json: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON)
     ai_brief_json: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON)
 
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
         server_default=func.now(),
@@ -169,7 +171,7 @@ class HomeSummary(Base):
         nullable=False,
     )
 
-    wechat_user: Mapped[WechatUser] = relationship(back_populates="home_summaries")
+    wechat_user: Mapped[WechatUser] = relationship(back_populates="home_summary")
 
 
 class GarminDailySummary(Base):
