@@ -7,6 +7,8 @@ vi.mock('@tarojs/components', () => {
     View: 'View',
     Text: 'Text',
     Button: 'Button',
+    Input: 'Input',
+    Switch: 'Switch',
   }
 })
 
@@ -28,7 +30,7 @@ vi.mock('../src/api/coach', () => {
 })
 
 import Home from '../src/pages/home'
-import { getDailyAnalysis, getProfile } from '../src/api/coach'
+import { bindGarmin, getDailyAnalysis, getProfile } from '../src/api/coach'
 
 type TestNode = ReactTestRendererJSON
 
@@ -120,11 +122,13 @@ const flushPromises = async () => {
 
 const getDailyAnalysisMock = getDailyAnalysis as unknown as ReturnType<typeof vi.fn>
 const getProfileMock = getProfile as unknown as ReturnType<typeof vi.fn>
+const bindGarminMock = bindGarmin as unknown as ReturnType<typeof vi.fn>
 
 describe('home page', () => {
   afterEach(() => {
     getDailyAnalysisMock.mockReset()
     getProfileMock.mockReset()
+    bindGarminMock.mockReset()
   })
 
   it('renders loading state', async () => {
@@ -199,5 +203,57 @@ describe('home page', () => {
 
     const loadingNodes = getTestId(root as TestNode | TestNode[], 'loading')
     expect(loadingNodes).toBeFalsy()
+  })
+
+  it('renders bind form and submits entered values', async () => {
+    getDailyAnalysisMock.mockResolvedValue({
+      date: '2024-01-01',
+      raw_data_summary: 'ok',
+      ai_advice: 'ok',
+    })
+    getProfileMock.mockResolvedValue({
+      openid: 'openid-1',
+      has_binding: false,
+    })
+    bindGarminMock.mockResolvedValue({ bound: true })
+
+    const renderer = create(<Home />)
+    await act(async () => {
+      await flushPromises()
+    })
+    await act(async () => {
+      await flushPromises()
+    })
+
+    const emailInput = renderer.root.findByProps({
+      'data-testid': 'garmin-email-input',
+    })
+    const passwordInput = renderer.root.findByProps({
+      'data-testid': 'garmin-password-input',
+    })
+    const isCnSwitch = renderer.root.findByProps({
+      'data-testid': 'garmin-is-cn-switch',
+    })
+    const bindButton = renderer.root.findByProps({
+      'data-testid': 'bind-submit',
+    })
+
+    await act(async () => {
+      emailInput.props.onInput({ detail: { value: 'user@example.com' } })
+      passwordInput.props.onInput({ detail: { value: 'secret' } })
+      isCnSwitch.props.onChange({ detail: { value: true } })
+    })
+
+    await act(async () => {
+      bindButton.props.onClick()
+      await flushPromises()
+    })
+
+    expect(bindGarminMock).toHaveBeenCalledWith({
+      openid: 'local-openid',
+      garmin_email: 'user@example.com',
+      garmin_password: 'secret',
+      is_cn: true,
+    })
   })
 })

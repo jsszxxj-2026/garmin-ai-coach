@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { View, Text, Button } from '@tarojs/components'
+import { View, Text, Button, Input, Switch } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 
 import Error from '../../components/Error'
@@ -16,6 +16,9 @@ function Home() {
   const [analysis, setAnalysis] = useState<DailyAnalysisResponse | null>(null)
   const [profile, setProfile] = useState<WechatProfileResponse | null>(null)
   const [openid] = useState('local-openid')
+  const [garminEmail, setGarminEmail] = useState('')
+  const [garminPassword, setGarminPassword] = useState('')
+  const [isCn, setIsCn] = useState(false)
 
   const summaryItems = useMemo(() => {
     const summary = analysis?.summary
@@ -58,15 +61,12 @@ function Home() {
   }, [])
 
   const handleBind = async () => {
-    if (!profile) {
-      return
-    }
     try {
       await bindGarmin({
-        openid: profile.openid,
-        garmin_email: 'placeholder@example.com',
-        garmin_password: 'placeholder',
-        is_cn: false,
+        openid,
+        garmin_email: garminEmail,
+        garmin_password: garminPassword,
+        is_cn: isCn,
       })
       Taro.showToast({ title: '已提交绑定', icon: 'success' })
       fetchData()
@@ -102,9 +102,40 @@ function Home() {
 
       {!isBound ? (
         <View className='bind-card'>
-          <Text className='bind-title'>尚未绑定 Garmin 账号</Text>
+          <Text className='bind-title'>绑定 Garmin 账号</Text>
           <Text className='bind-desc'>绑定后可同步睡眠、体能电量与压力数据</Text>
-          <Button className='primary-button' onClick={handleBind}>
+          <View className='bind-form'>
+            <Input
+              className='bind-input'
+              type='text'
+              placeholder='Garmin 邮箱'
+              value={garminEmail}
+              onInput={(event) => setGarminEmail(event.detail.value)}
+              data-testid='garmin-email-input'
+            />
+            <Input
+              className='bind-input'
+              type='text'
+              password
+              placeholder='Garmin 密码'
+              value={garminPassword}
+              onInput={(event) => setGarminPassword(event.detail.value)}
+              data-testid='garmin-password-input'
+            />
+            <View className='bind-switch'>
+              <Text>中国区账号</Text>
+              <Switch
+                checked={isCn}
+                onChange={(event) => setIsCn(event.detail.value)}
+                data-testid='garmin-is-cn-switch'
+              />
+            </View>
+          </View>
+          <Button
+            className='primary-button'
+            onClick={handleBind}
+            data-testid='bind-submit'
+          >
             立即绑定
           </Button>
         </View>
