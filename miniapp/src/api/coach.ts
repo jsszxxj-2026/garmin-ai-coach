@@ -28,8 +28,8 @@ export const bindGarmin = async (payload: WechatBindGarminRequest) => {
   return apiClient.post<WechatBindGarminResponse>('/api/wechat/bind-garmin', payload)
 }
 
-export const getProfile = async () => {
-  return apiClient.get<WechatProfileResponse>('/api/wechat/profile')
+export const getProfile = async (openid: string) => {
+  return apiClient.get<WechatProfileResponse>('/api/wechat/profile', { openid })
 }
 
 export const chat = async (payload: WechatChatRequest) => {

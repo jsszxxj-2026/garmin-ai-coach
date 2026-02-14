@@ -15,6 +15,7 @@ function Home() {
   const [error, setError] = useState<string | null>(null)
   const [analysis, setAnalysis] = useState<DailyAnalysisResponse | null>(null)
   const [profile, setProfile] = useState<WechatProfileResponse | null>(null)
+  const [openid] = useState('local-openid')
 
   const summaryItems = useMemo(() => {
     const summary = analysis?.summary
@@ -40,7 +41,7 @@ function Home() {
     setError(null)
     try {
       const [profileResponse, analysisResponse] = await Promise.all([
-        getProfile(),
+        getProfile(openid),
         getDailyAnalysis(),
       ])
       setProfile(profileResponse)
@@ -90,7 +91,7 @@ function Home() {
     return <Error message={error} onRetry={fetchData} />
   }
 
-  const isBound = profile?.garmin_bound
+  const isBound = profile?.has_binding
 
   return (
     <View className='page home'>

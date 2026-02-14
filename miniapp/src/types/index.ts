@@ -32,12 +32,14 @@ export type WechatBindGarminRequest = {
 }
 
 export type WechatBindGarminResponse = {
-  ok: boolean
+  bound: boolean
 }
 
 export type WechatProfileResponse = {
   openid: string
-  garmin_bound: boolean
+  has_binding: boolean
+  garmin_email?: string
+  is_cn?: boolean
 }
 
 export type WechatChatRequest = {
