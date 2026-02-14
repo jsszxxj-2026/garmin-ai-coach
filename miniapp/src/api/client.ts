@@ -1,11 +1,6 @@
 import Taro from '@tarojs/taro'
 
-export const getApiBase = () => {
-  if (typeof process !== 'undefined' && process.env?.TARO_APP_API_BASE_URL) {
-    return process.env.TARO_APP_API_BASE_URL
-  }
-  return ''
-}
+export const getApiBase = () => process.env.TARO_APP_API_BASE_URL || ''
 
 const normalizeUrl = (base: string, path: string) => {
   if (!base) {
