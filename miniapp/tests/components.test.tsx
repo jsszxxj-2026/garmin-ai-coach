@@ -167,8 +167,21 @@ describe('base components', () => {
     expect(root).toBeTruthy()
 
     const paragraphs = findAllByType(root, 'Text')
-    expect(paragraphs).toHaveLength(2)
-    expect(getNodeText(paragraphs[0])).toContain('第一段')
-    expect(getNodeText(paragraphs[1])).toContain('第二段')
+    const text = paragraphs.map((node) => getNodeText(node)).join('')
+    expect(text).toContain('第一段')
+    expect(text).toContain('第二段')
+  })
+
+  it('renders MarkdownView headings and list', () => {
+    const node = MarkdownView({ content: '# 标题\n- 列表A\n- 列表B' })
+
+    const root = getTestId(node, 'markdown')
+    expect(root).toBeTruthy()
+
+    const paragraphs = findAllByType(root, 'Text')
+    const text = paragraphs.map((node) => getNodeText(node)).join('')
+    expect(text).toContain('标题')
+    expect(text).toContain('列表A')
+    expect(text).toContain('列表B')
   })
 })

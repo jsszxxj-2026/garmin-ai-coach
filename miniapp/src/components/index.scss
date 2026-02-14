@@ -68,3 +68,75 @@
   color: #1f2937;
   line-height: 1.7;
 }
+
+.markdown-h1 {
+  font-size: 34px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.4;
+}
+
+.markdown-h2 {
+  font-size: 30px;
+  font-weight: 600;
+  color: #0f172a;
+  line-height: 1.4;
+}
+
+.markdown-h3 {
+  font-size: 28px;
+  font-weight: 600;
+  color: #0f172a;
+  line-height: 1.4;
+}
+
+.markdown-bold {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.markdown-code {
+  font-family: 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 22px;
+  padding: 2px 8px;
+  background: #e2e8f0;
+  border-radius: 8px;
+  color: #0f172a;
+}
+
+.markdown-quote {
+  padding: 14px 18px;
+  border-left: 6px solid #6366f1;
+  background: #eef2ff;
+  border-radius: 12px;
+}
+
+.markdown-quote-text {
+  font-size: 26px;
+  color: #1f2937;
+  line-height: 1.7;
+}
+
+.markdown-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.markdown-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.markdown-list-bullet {
+  font-size: 26px;
+  color: #6366f1;
+  font-weight: 600;
+}
+
+.markdown-list-text {
+  font-size: 26px;
+  color: #1f2937;
+  line-height: 1.7;
+}
