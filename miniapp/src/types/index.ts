@@ -15,6 +15,29 @@ export type DailyAnalysisResponse = {
   }
 }
 
+export type HomeSummaryResponse = {
+  latest_run: {
+    start_time: string
+    distance_km: number
+    intensity?: string | null
+    avg_pace?: string | null
+    duration_min?: number | null
+  } | null
+  week_stats: {
+    distance_km: number
+    avg_speed_kmh?: number | null
+  } | null
+  month_stats: {
+    distance_km: number
+    avg_speed_kmh?: number | null
+  } | null
+  ai_brief: {
+    week?: string | null
+    month?: string | null
+  } | null
+  updated_at?: string | null
+}
+
 export type WechatLoginRequest = {
   code: string
 }

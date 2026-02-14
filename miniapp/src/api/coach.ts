@@ -1,6 +1,7 @@
 import { apiClient } from './client'
 import type {
   DailyAnalysisResponse,
+  HomeSummaryResponse,
   WechatBindGarminRequest,
   WechatBindGarminResponse,
   WechatChatRequest,
@@ -20,6 +21,10 @@ export const getDailyAnalysisByDate = async (date: string) => {
   return apiClient.get<DailyAnalysisResponse>('/api/coach/daily-analysis', {
     target_date: date,
   })
+}
+
+export const getHomeSummary = async (openid: string) => {
+  return apiClient.get<HomeSummaryResponse>('/api/coach/home-summary', { openid })
 }
 
 export const loginWechat = async (payload: WechatLoginRequest) => {

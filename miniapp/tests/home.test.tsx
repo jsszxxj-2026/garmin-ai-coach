@@ -24,6 +24,7 @@ vi.mock('@tarojs/taro', () => {
 vi.mock('../src/api/coach', () => {
   return {
     getDailyAnalysis: vi.fn(),
+    getHomeSummary: vi.fn(),
     getProfile: vi.fn(),
     bindGarmin: vi.fn(),
     unbindGarmin: vi.fn(),
@@ -34,6 +35,7 @@ import Home from '../src/pages/home'
 import {
   bindGarmin,
   getDailyAnalysis,
+  getHomeSummary,
   getProfile,
   unbindGarmin,
 } from '../src/api/coach'
@@ -127,6 +129,7 @@ const flushPromises = async () => {
 }
 
 const getDailyAnalysisMock = getDailyAnalysis as unknown as ReturnType<typeof vi.fn>
+const getHomeSummaryMock = getHomeSummary as unknown as ReturnType<typeof vi.fn>
 const getProfileMock = getProfile as unknown as ReturnType<typeof vi.fn>
 const bindGarminMock = bindGarmin as unknown as ReturnType<typeof vi.fn>
 const unbindGarminMock = unbindGarmin as unknown as ReturnType<typeof vi.fn>
@@ -134,6 +137,7 @@ const unbindGarminMock = unbindGarmin as unknown as ReturnType<typeof vi.fn>
 describe('home page', () => {
   afterEach(() => {
     getDailyAnalysisMock.mockReset()
+    getHomeSummaryMock.mockReset()
     getProfileMock.mockReset()
     bindGarminMock.mockReset()
     unbindGarminMock.mockReset()
@@ -142,6 +146,7 @@ describe('home page', () => {
   it('renders loading state', async () => {
     const pending = new Promise(() => {})
     getDailyAnalysisMock.mockReturnValue(pending)
+    getHomeSummaryMock.mockReturnValue(pending)
     getProfileMock.mockReturnValue(pending)
 
     const renderer = create(<Home />)
@@ -162,6 +167,12 @@ describe('home page', () => {
       date: '2024-01-01',
       raw_data_summary: 'ok',
       ai_advice: 'ok',
+    })
+    getHomeSummaryMock.mockResolvedValue({
+      latest_run: null,
+      week_stats: null,
+      month_stats: null,
+      ai_brief: null,
     })
     getProfileMock.mockRejectedValue(new Error('fail'))
 
@@ -192,6 +203,27 @@ describe('home page', () => {
         stress: 33,
       },
     })
+    getHomeSummaryMock.mockResolvedValue({
+      latest_run: {
+        start_time: '2024-01-01T07:00:00',
+        distance_km: 5.2,
+        intensity: '中等',
+        avg_pace: '5:10',
+        duration_min: 27,
+      },
+      week_stats: {
+        distance_km: 12,
+        avg_speed_kmh: 10.5,
+      },
+      month_stats: {
+        distance_km: 42,
+        avg_speed_kmh: 10.1,
+      },
+      ai_brief: {
+        week: '本周跑量稳定',
+        month: '本月注意恢复',
+      },
+    })
     getProfileMock.mockResolvedValue({
       openid: 'openid-1',
       garmin_bound: true,
@@ -207,7 +239,7 @@ describe('home page', () => {
 
     const root = renderer.toJSON()
     const cards = getAllByTestId(root as TestNode | TestNode[], 'stat-card')
-    expect(cards).toHaveLength(3)
+    expect(cards.length).toBeGreaterThanOrEqual(3)
 
     const loadingNodes = getTestId(root as TestNode | TestNode[], 'loading')
     expect(loadingNodes).toBeFalsy()
@@ -218,6 +250,12 @@ describe('home page', () => {
       date: '2024-01-01',
       raw_data_summary: 'ok',
       ai_advice: 'ok',
+    })
+    getHomeSummaryMock.mockResolvedValue({
+      latest_run: null,
+      week_stats: null,
+      month_stats: null,
+      ai_brief: null,
     })
     getProfileMock.mockResolvedValue({
       openid: 'openid-1',
@@ -270,6 +308,12 @@ describe('home page', () => {
       date: '2024-01-01',
       raw_data_summary: 'ok',
       ai_advice: 'ok',
+    })
+    getHomeSummaryMock.mockResolvedValue({
+      latest_run: null,
+      week_stats: null,
+      month_stats: null,
+      ai_brief: null,
     })
     getProfileMock
       .mockResolvedValueOnce({

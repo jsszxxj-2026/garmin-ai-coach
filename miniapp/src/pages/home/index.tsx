@@ -5,8 +5,8 @@ import Taro from '@tarojs/taro'
 import Error from '../../components/Error'
 import Loading from '../../components/Loading'
 import StatCard from '../../components/StatCard'
-import { bindGarmin, getDailyAnalysis, getProfile, unbindGarmin } from '../../api/coach'
-import type { DailyAnalysisResponse, WechatProfileResponse } from '../../types'
+import { bindGarmin, getDailyAnalysis, getHomeSummary, getProfile, unbindGarmin } from '../../api/coach'
+import type { DailyAnalysisResponse, HomeSummaryResponse, WechatProfileResponse } from '../../types'
 
 import './index.scss'
 
@@ -14,6 +14,7 @@ function Home() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [analysis, setAnalysis] = useState<DailyAnalysisResponse | null>(null)
+  const [homeSummary, setHomeSummary] = useState<HomeSummaryResponse | null>(null)
   const [profile, setProfile] = useState<WechatProfileResponse | null>(null)
   const [openid] = useState('local-openid')
   const [garminEmail, setGarminEmail] = useState('')
@@ -43,12 +44,14 @@ function Home() {
     setLoading(true)
     setError(null)
     try {
-      const [profileResponse, analysisResponse] = await Promise.all([
+      const [profileResponse, analysisResponse, homeSummaryResponse] = await Promise.all([
         getProfile(openid),
         getDailyAnalysis(),
+        getHomeSummary(openid),
       ])
       setProfile(profileResponse)
       setAnalysis(analysisResponse)
+      setHomeSummary(homeSummaryResponse)
     } catch (err) {
       setError('获取数据失败')
     } finally {
@@ -102,6 +105,10 @@ function Home() {
   }
 
   const isBound = profile?.has_binding
+  const latestRun = homeSummary?.latest_run
+  const weekStats = homeSummary?.week_stats
+  const monthStats = homeSummary?.month_stats
+  const aiBrief = homeSummary?.ai_brief
 
   return (
     <View className='page home'>
@@ -162,6 +169,77 @@ function Home() {
           </Button>
         </View>
       )}
+
+      {latestRun ? (
+        <View className='summary'>
+          <Text className='section-title'>最近一次跑步</Text>
+          <View className='summary-grid'>
+            <StatCard
+              title='距离'
+              value={String(latestRun.distance_km)}
+              unit='km'
+            />
+            <StatCard
+              title='配速'
+              value={latestRun.avg_pace || '-'}
+            />
+            <StatCard
+              title='强度'
+              value={latestRun.intensity || '-'}
+            />
+          </View>
+        </View>
+      ) : null}
+
+      {weekStats || monthStats ? (
+        <View className='summary'>
+          <Text className='section-title'>周/月统计</Text>
+          <View className='summary-grid'>
+            {weekStats ? (
+              <StatCard
+                title='本周跑量'
+                value={String(weekStats.distance_km)}
+                unit='km'
+              />
+            ) : null}
+            {weekStats ? (
+              <StatCard
+                title='本周均速'
+                value={weekStats.avg_speed_kmh ? String(weekStats.avg_speed_kmh) : '-'}
+                unit='km/h'
+              />
+            ) : null}
+            {monthStats ? (
+              <StatCard
+                title='本月跑量'
+                value={String(monthStats.distance_km)}
+                unit='km'
+              />
+            ) : null}
+            {monthStats ? (
+              <StatCard
+                title='本月均速'
+                value={monthStats.avg_speed_kmh ? String(monthStats.avg_speed_kmh) : '-'}
+                unit='km/h'
+              />
+            ) : null}
+          </View>
+        </View>
+      ) : null}
+
+      {aiBrief?.week || aiBrief?.month ? (
+        <View className='summary'>
+          <Text className='section-title'>教练简评</Text>
+          <View className='summary-grid'>
+            {aiBrief?.week ? (
+              <StatCard title='本周' value={aiBrief.week} />
+            ) : null}
+            {aiBrief?.month ? (
+              <StatCard title='本月' value={aiBrief.month} />
+            ) : null}
+          </View>
+        </View>
+      ) : null}
 
       {summaryItems.length ? (
         <View className='summary'>
