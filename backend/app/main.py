@@ -32,7 +32,10 @@ from backend.app.api.wechat import router as wechat_router
 from backend.app.services.garmin_client import GarminClient
 from backend.app.services.data_processor import DataProcessor
 from backend.app.services.gemini_service import GeminiService
+from backend.app.services.home_summary_service import HomeSummaryService
 from backend.app.services.report_service import ReportService
+from backend.app.db.crud import get_home_summary
+from backend.app.db.models import WechatUser
 from backend.app.db.session import get_db_optional, init_db
 from src.services.garmin_service import GarminService
 from src.core.config import settings
@@ -72,6 +75,14 @@ class DailyAnalysisResponse(BaseModel):
     raw_data_summary: str  # 清洗后的 Markdown 文本，用于前端展示数据概览
     ai_advice: str  # Gemini 的建议
     charts: Optional[Dict[str, List]] = None  # 图表数据（labels, paces, heart_rates, cadences）
+
+
+class HomeSummaryResponse(BaseModel):
+    latest_run: Optional[Dict[str, Any]] = None
+    week_stats: Optional[Dict[str, Any]] = None
+    month_stats: Optional[Dict[str, Any]] = None
+    ai_brief: Optional[Dict[str, Any]] = None
+    updated_at: Optional[str] = None
 
 
 # Mock Mode 开关（通过 .env 配置）
@@ -138,6 +149,12 @@ def get_report_service(
     gemini: GeminiService = Depends(get_gemini_service),
 ) -> ReportService:
     return ReportService(processor=processor, gemini=gemini)
+
+
+def get_home_summary_service(
+    gemini: GeminiService = Depends(get_gemini_service),
+) -> HomeSummaryService:
+    return HomeSummaryService(gemini=gemini)
 
 
 _gemini_singleton: Optional[GeminiService] = None
@@ -291,6 +308,39 @@ async def root():
 async def health_check():
     """健康检查端点"""
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+
+
+@app.get("/api/coach/home-summary", response_model=HomeSummaryResponse)
+async def get_home_summary_endpoint(
+    openid: str,
+    db: Optional[Session] = Depends(get_db_optional),
+    home_summary_service: HomeSummaryService = Depends(get_home_summary_service),
+):
+    if not db:
+        raise HTTPException(status_code=500, detail="数据库不可用")
+
+    wechat_user = db.query(WechatUser).filter(WechatUser.openid == openid).one_or_none()
+    if not wechat_user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    cached = get_home_summary(db, wechat_user_id=wechat_user.id)
+    if cached:
+        return HomeSummaryResponse(
+            latest_run=cached.latest_run_json,
+            week_stats=cached.week_stats_json,
+            month_stats=cached.month_stats_json,
+            ai_brief=cached.ai_brief_json,
+            updated_at=cached.updated_at.isoformat() if cached.updated_at else None,
+        )
+
+    summary = home_summary_service.build_summary(db=db, wechat_user_id=wechat_user.id)
+    return HomeSummaryResponse(
+        latest_run=summary.get("latest_run"),
+        week_stats=summary.get("week_stats"),
+        month_stats=summary.get("month_stats"),
+        ai_brief=summary.get("ai_brief"),
+        updated_at=summary.get("updated_at"),
+    )
 
 
 @app.get("/api/coach/daily-analysis", response_model=DailyAnalysisResponse)

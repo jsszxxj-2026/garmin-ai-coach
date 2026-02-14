@@ -2,6 +2,7 @@
 Gemini Service
 封装 Google Gemini API，作为项目的"大脑"，提供专业的跑步教练分析。
 """
+import json
 import logging
 import os
 import time
@@ -273,3 +274,40 @@ class GeminiService:
         """
         # 直接使用当前模型（已强制为 gemini-3-flash-preview）
         return self.analyze_training(daily_report_md)
+
+    def generate_home_summary_brief(
+        self,
+        *,
+        week_stats: dict,
+        month_stats: dict,
+        run_count: int,
+        sleep_days: int,
+    ) -> dict[str, Optional[str]]:
+        if run_count < 3 or sleep_days < 3:
+            return {"week": None, "month": None}
+
+        prompt_payload = {
+            "run_count_30d": run_count,
+            "sleep_days_30d": sleep_days,
+            "week_stats": week_stats,
+            "month_stats": month_stats,
+        }
+        prompt = (
+            "你是跑步教练，请根据数据输出简短首页简评。\n"
+            "仅返回 JSON：{\"week\": string|null, \"month\": string|null}。\n"
+            "要求：每条不超过 40 字，不要换行，不要 Markdown。\n"
+            f"输入数据: {json.dumps(prompt_payload, ensure_ascii=False)}"
+        )
+
+        try:
+            result_text = self.analyze_training(prompt)
+            data = json.loads(result_text)
+            week = data.get("week") if isinstance(data, dict) else None
+            month = data.get("month") if isinstance(data, dict) else None
+            return {
+                "week": str(week) if week else None,
+                "month": str(month) if month else None,
+            }
+        except Exception as e:
+            logger.warning(f"[Gemini] Home summary brief failed: {e}")
+            return {"week": None, "month": None}

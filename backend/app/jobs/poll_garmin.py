@@ -10,8 +10,10 @@ from backend.app.db.crud import (
     get_or_create_sync_state,
     log_notification,
     get_garmin_credential,
+    upsert_home_summary,
 )
 from backend.app.db.models import WechatUser
+from backend.app.services.home_summary_service import HomeSummaryService
 from backend.app.services.report_service import ReportService
 from backend.app.services.wechat_service import WechatService
 
@@ -56,6 +58,7 @@ def poll_garmin_for_user(
     db: Session,
     wechat_user: WechatUser,
     report_service: ReportService,
+    home_summary_service: HomeSummaryService,
     wechat_service: WechatService,
 ) -> None:
     credential = get_garmin_credential(db, wechat_user_id=wechat_user.id)
@@ -83,9 +86,19 @@ def poll_garmin_for_user(
         db=db,
     )
 
+    home_summary_payload = home_summary_service.build_summary(db=db, wechat_user_id=wechat_user.id)
+    upsert_home_summary(
+        db,
+        wechat_user_id=wechat_user.id,
+        latest_run_json=home_summary_payload.get("latest_run"),
+        week_stats_json=home_summary_payload.get("week_stats"),
+        month_stats_json=home_summary_payload.get("month_stats"),
+        ai_brief_json=home_summary_payload.get("ai_brief"),
+    )
+
     sync_state.last_summary_date = datetime.strptime(analysis_date, "%Y-%m-%d").date()
     sync_state.last_poll_at = datetime.utcnow()
-    db.flush()
+    db.commit()
 
     event_key = f"daily:{analysis_date}"
     try:
@@ -120,6 +133,7 @@ def poll_garmin_for_user(
 
 def poll_garmin(db: Session) -> None:
     report_service = ReportService()
+    home_summary_service = HomeSummaryService()
     wechat_service = WechatService()
 
     users = db.query(WechatUser).all()
@@ -129,6 +143,7 @@ def poll_garmin(db: Session) -> None:
                 db=db,
                 wechat_user=user,
                 report_service=report_service,
+                home_summary_service=home_summary_service,
                 wechat_service=wechat_service,
             )
         except Exception as e:
