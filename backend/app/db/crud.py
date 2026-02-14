@@ -17,6 +17,7 @@ from backend.app.db.models import (
     DailyAnalysis,
     GarminDailySummary,
     GarminCredential,
+    HomeSummary,
     NotificationLog,
     SyncState,
     TrainingPlan,
@@ -171,6 +172,47 @@ def log_notification(
         error_message=error_message,
     )
     db.add(row)
+    return row
+
+
+def get_home_summary(db: Session, *, wechat_user_id: int) -> Optional[HomeSummary]:
+    return (
+        db.query(HomeSummary)
+        .filter(HomeSummary.wechat_user_id == wechat_user_id)
+        .one_or_none()
+    )
+
+
+def upsert_home_summary(
+    db: Session,
+    *,
+    wechat_user_id: int,
+    latest_run_json: Optional[dict[str, Any]] = None,
+    week_stats_json: Optional[dict[str, Any]] = None,
+    month_stats_json: Optional[dict[str, Any]] = None,
+    ai_brief_json: Optional[dict[str, Any]] = None,
+) -> HomeSummary:
+    existing = (
+        db.query(HomeSummary)
+        .filter(HomeSummary.wechat_user_id == wechat_user_id)
+        .one_or_none()
+    )
+
+    fields = {
+        "latest_run_json": latest_run_json,
+        "week_stats_json": week_stats_json,
+        "month_stats_json": month_stats_json,
+        "ai_brief_json": ai_brief_json,
+    }
+
+    if existing:
+        for k, v in fields.items():
+            setattr(existing, k, v)
+        return existing
+
+    row = HomeSummary(wechat_user_id=wechat_user_id, **fields)
+    db.add(row)
+    db.flush()
     return row
 
 

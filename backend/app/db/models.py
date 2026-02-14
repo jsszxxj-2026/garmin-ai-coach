@@ -70,6 +70,10 @@ class WechatUser(Base):
         back_populates="wechat_user",
         cascade="all, delete-orphan",
     )
+    home_summaries: Mapped[list[HomeSummary]] = relationship(
+        back_populates="wechat_user",
+        cascade="all, delete-orphan",
+    )
 
 
 class GarminCredential(Base):
@@ -141,6 +145,31 @@ class NotificationLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
 
     wechat_user: Mapped[WechatUser] = relationship(back_populates="notification_logs")
+
+
+class HomeSummary(Base):
+    __tablename__ = "home_summaries"
+    __table_args__ = (
+        UniqueConstraint("wechat_user_id", name="uq_home_summary_wechat_user"),
+        {"mysql_charset": "utf8mb4"},
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    wechat_user_id: Mapped[int] = mapped_column(ForeignKey("wechat_users.id", ondelete="CASCADE"), nullable=False)
+
+    latest_run_json: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON)
+    week_stats_json: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON)
+    month_stats_json: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON)
+    ai_brief_json: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON)
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    wechat_user: Mapped[WechatUser] = relationship(back_populates="home_summaries")
 
 
 class GarminDailySummary(Base):
