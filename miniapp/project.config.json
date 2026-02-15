@@ -1,0 +1,10 @@
+{
+  "miniprogramRoot": "dist/",
+  "projectname": "miniapp",
+  "description": "",
+  "appid": "touristappid",
+  "setting": {
+    "urlCheck": false
+  },
+  "compileType": "miniprogram"
+}

@@ -90,6 +90,13 @@ python3 backend/app/main.py
 - Garmin passwords are stored encrypted.
 - `GARMIN_CRED_ENCRYPTION_KEY` is required at runtime.
 
+## Miniapp (Taro)
+
+- 代码目录：`miniapp/`
+- 开发编译：`cd miniapp && npm run dev:weapp`
+- 构建：`cd miniapp && npx taro build --type weapp`
+- 环境变量：在 `miniapp/.env.development` 中设置 `TARO_APP_API_BASE_URL`
+
 ## Testing
 
 运行 Garmin 连接测试前，**必须先使用虚拟环境**（否则会报 `ModuleNotFoundError: No module named 'garminconnect'`）。
