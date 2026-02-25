@@ -1,114 +1,148 @@
-# GarminCoach
+# garmin-ai-coach
 
-A FastAPI-based application for integrating Garmin data with AI coaching services.
+一款基于微信小程序的 AI 跑步教练应用，深度整合 Garmin 运动数据与 Google Gemini AI 能力，为跑者提供个性化的训练分析与智能建议。
 
-## Project Structure
+## 项目简介
 
-```
-GarminCoach/
-├── .env.example          # Environment variables template
-├── .gitignore           # Git ignore rules
-├── requirements.txt     # Python dependencies
-├── README.md           # Project documentation
-├── src/                # Source code directory
-│   ├── main.py        # FastAPI application entry point
-│   ├── core/          # Core configuration
-│   │   └── config.py  # Application configuration
-│   ├── services/       # Business logic services
-│   │   ├── garmin_service.py  # Garmin API integration
-│   │   └── llm_service.py     # LLM API integration
-│   └── models/        # Data models
-└── scripts/           # Standalone scripts
-    └── test_garmin_auth.py  # Garmin authentication test
-```
+## 核心功能
 
-## Setup
+### 🏃 运动数据同步
+- 自动同步 Garmin 跑步活动（距离，配速，心率、步频等）
+- 同步睡眠数据（睡眠时长、睡眠分数、深度睡眠等）
+- 每 30 分钟自动轮询更新
 
-1. Create a virtual environment:
+### 🤖 AI 智能分析
+- **每日报告**：基于当日运动与身体状态生成个性化建议
+- **周期统计**：周/月跑量、均速、睡眠情况汇总
+- **智能简评**：AI 教练针对训练数据给出专业点评（需满足数据门槛）
+
+### 📱 微信小程序
+- 扫码绑定 Garmin 账号
+- 首页展示：最近跑步、周/月统计、AI 简评
+- 点击卡片查看详细分析
+- 支持解绑与重新绑定
+
+## 技术架构
+
+| 层级 | 技术栈 |
+|------|--------|
+| 前端 | Taro + React + TypeScript |
+| 后端 | FastAPI + Python 3.9+ |
+| 数据库 | MySQL + SQLAlchemy |
+| AI | Google Gemini |
+| 运动数据 | Garmin Connect API |
+
+## 快速开始
+
+### 后端
 ```bash
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-2. Install dependencies:
-```bash
+# 安装依赖
 pip3 install -r requirements.txt
-# Note: After activating virtual environment, you can use 'pip' instead of 'pip3'
-```
 
-3. Copy environment variables:
-```bash
+# 配置环境变量（参考 .env.example）
 cp .env.example .env
-```
 
-4. Edit `.env` file with your actual credentials.
-
-   Multi-user (WeChat) configuration:
-   - WECHAT_MINI_APPID / WECHAT_MINI_SECRET
-   - WECHAT_SUBSCRIBE_TEMPLATE_ID / WECHAT_SUBSCRIBE_PAGE
-   - GARMIN_CRED_ENCRYPTION_KEY (Base64 or 32-byte key)
-
-5. Run the application:
-```bash
-# 方式 1: 使用 uvicorn 运行（推荐）
+# 启动服务
 uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
-
-# 方式 2: 直接运行 main.py（需要先激活虚拟环境）
-source venv/bin/activate
-python3 backend/app/main.py
-
-# 方式 3: 使用虚拟环境的 Python 直接运行
-./venv/bin/python3 backend/app/main.py
 ```
 
-## Development
-
-- API documentation will be available at `http://localhost:8000/docs`
-- Alternative docs at `http://localhost:8000/redoc`
-
-## WeChat Mini Program (Multi-user)
-
-### Binding flow
-
-1. Mini program login: `POST /api/wechat/login` with `code`.
-2. Bind Garmin: `POST /api/wechat/bind-garmin` with `openid`, `garmin_email`, `garmin_password`, `is_cn`.
-3. Query binding: `GET /api/wechat/profile?openid=...`.
-4. Unbind: `POST /api/wechat/unbind-garmin`.
-
-### Subscription message
-
-- Template fields used: `thing1`, `date2`, `thing3`.
-- The backend sends a summary when new data is detected.
-
-### Polling
-
-- Background scheduler runs every 30 minutes.
-- Entry point: `backend/app/jobs/scheduler.py` (`start_scheduler`).
-
-### Encryption
-
-- Garmin passwords are stored encrypted.
-- `GARMIN_CRED_ENCRYPTION_KEY` is required at runtime.
-
-## Miniapp (Taro)
-
-- 代码目录：`miniapp/`
-- 开发编译：`cd miniapp && npm run dev:weapp`
-- 构建：`cd miniapp && npx taro build --type weapp`
-- 环境变量：在 `miniapp/.env.development` 中设置 `TARO_APP_API_BASE_URL`
-
-## Testing
-
-运行 Garmin 连接测试前，**必须先使用虚拟环境**（否则会报 `ModuleNotFoundError: No module named 'garminconnect'`）。
-
-**方式一：先激活虚拟环境，再运行**
+### 小程序
 ```bash
+cd miniapp
+npm install
+npm run dev:weapp
+```
+
+## 主要接口
+
+| 接口 | 说明 |
+|------|------|
+| `GET /api/coach/home-summary` | 首页聚合摘要 |
+| `GET /api/coach/period-analysis` | 周/月统计与分析 |
+| `GET /api/coach/daily-analysis` | 每日详细报告 |
+| `POST /api/wechat/bind-garmin` | 绑定 Garmin 账号 |
+| `POST /api/wechat/chat` | AI 教练对话 |
+
+## 项目结构
+
+```
+garmin-ai-coach/
+├── .env.example          # 环境变量模板
+├── .gitignore           # Git 忽略规则
+├── requirements.txt     # Python 依赖
+├── README.md            # 项目文档
+├── backend/             # 后端代码
+│   ├── app/
+│   │   ├── api/        # API 路由
+│   │   ├── db/         # 数据库模型与 CRUD
+│   │   ├── jobs/       # 定时任务
+│   │   ├── services/   # 业务逻辑服务
+│   │   └── main.py     # FastAPI 入口
+│   └── app.egg-info/
+├── miniapp/             # 微信小程序（Taro）
+│   ├── src/
+│   │   ├── api/        # API 调用
+│   │   ├── components/ # 组件
+│   │   ├── pages/      # 页面
+│   │   └── types/      # 类型定义
+│   └── dist/           # 编译输出
+├── src/                 # 共享代码
+│   ├── core/           # 核心配置
+│   └── services/        # 共享服务
+├── scripts/             # 独立脚本
+├── tests/               # 测试
+└── docs/               # 文档
+```
+
+## 配置说明
+
+### 后端环境变量
+
+```
+# Garmin 配置
+GARMIN_EMAIL=你的Garmin邮箱
+GARMIN_PASSWORD=你的Garmin密码
+GARMIN_IS_CN=true  # 中国区账号设为 true
+
+# Gemini AI 配置
+GEMINI_API_KEY=你的Gemini_API_Key
+
+# 微信小程序配置
+WECHAT_MINI_APPID=你的AppID
+WECHAT_MINI_SECRET=你的AppSecret
+
+# 加密密钥（用于存储 Garmin 密码）
+GARMIN_CRED_ENCRYPTION_KEY=生成的密钥
+
+# 数据库
+DATABASE_URL=mysql+pymysql://user:password@localhost:3306/garmin_coach
+```
+
+### 小程序环境变量
+
+在 `miniapp/.env.development` 中设置：
+```
+TARO_APP_API_BASE_URL=http://你的服务器IP:8000
+```
+
+## 开发
+
+- API 文档：http://localhost:8000/docs
+- 备用文档：http://localhost:8000/redoc
+
+## 部署
+
+详见项目文档或部署指南。
+
+## 测试
+
+运行 Garmin 连接测试前，**必须先使用虚拟环境**：
+
+```bash
+# 方式一：先激活虚拟环境
 source venv/bin/activate
 python3 scripts/test_garmin_auth.py
-```
-激活后也可用 `python`（本机若没有 `python` 命令则用 `python3`）。
 
-**方式二：直接指定虚拟环境中的 Python（无需激活）**
-```bash
+# 方式二：直接指定虚拟环境中的 Python
 ./venv/bin/python3 scripts/test_garmin_auth.py
 ```
