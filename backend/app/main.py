@@ -85,6 +85,18 @@ class HomeSummaryResponse(BaseModel):
     updated_at: Optional[str] = None
 
 
+class PeriodAnalysisResponse(BaseModel):
+    period: str  # "week" or "month"
+    start_date: str
+    end_date: str
+    run_count: int
+    total_distance_km: float
+    avg_speed_kmh: Optional[float] = None
+    sleep_days: int
+    avg_sleep_hours: Optional[float] = None
+    ai_analysis: Optional[str] = None
+
+
 # Mock Mode 开关（通过 .env 配置）
 USE_MOCK_MODE = settings.USE_MOCK_MODE
 
@@ -343,13 +355,127 @@ async def get_home_summary_endpoint(
     )
 
 
+@app.get("/api/coach/period-analysis", response_model=PeriodAnalysisResponse)
+async def get_period_analysis(
+    openid: str,
+    period: str,  # "week" or "month"
+    db: Optional[Session] = Depends(get_db_optional),
+    gemini: GeminiService = Depends(get_gemini_service),
+):
+    if not db:
+        raise HTTPException(status_code=500, detail="数据库不可用")
+
+    wechat_user = db.query(WechatUser).filter(WechatUser.openid == openid).one_or_none()
+    if not wechat_user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    from datetime import date, timedelta
+    today = date.today()
+
+    if period == "week":
+        start_date = today - timedelta(days=today.weekday())
+        end_date = today
+    elif period == "month":
+        start_date = today.replace(day=1)
+        end_date = today
+    else:
+        raise HTTPException(status_code=400, detail="无效的周期类型")
+
+    # 获取 Garmin 凭证和 User
+    from backend.app.db.crud import get_garmin_credential
+    from backend.app.db.models import User, Activity, GarminDailySummary
+    from sqlalchemy import func
+
+    credential = get_garmin_credential(db, wechat_user_id=wechat_user.id)
+    if not credential:
+        raise HTTPException(status_code=404, detail="Garmin 未绑定")
+
+    user = db.query(User).filter(User.garmin_email == credential.garmin_email).one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    # 查询跑步数据
+    runs = db.query(Activity).filter(
+        Activity.user_id == user.id,
+        Activity.activity_date >= start_date,
+        Activity.activity_date <= end_date,
+        Activity.type.ilike("%run%"),
+    ).all()
+
+    run_count = len(runs)
+    total_distance = sum((r.distance_km or 0) for r in runs)
+    total_duration = sum((r.duration_seconds or 0) for r in runs)
+    avg_speed = None
+    if run_count >= 2 and total_distance >= 5 and total_duration > 0:
+        avg_speed = round(total_distance / (total_duration / 3600.0), 1)
+
+    # 查询睡眠数据
+    sleep_records = db.query(GarminDailySummary).filter(
+        GarminDailySummary.user_id == user.id,
+        GarminDailySummary.summary_date >= start_date,
+        GarminDailySummary.summary_date <= end_date,
+    ).all()
+
+    sleep_days = 0
+    total_sleep_hours = 0.0
+    for rec in sleep_records:
+        if rec.sleep_time_hours is not None:
+            sleep_days += 1
+            total_sleep_hours += rec.sleep_time_hours
+        elif rec.sleep_time_seconds is not None:
+            sleep_days += 1
+            total_sleep_hours += rec.sleep_time_seconds / 3600.0
+
+    avg_sleep_hours = round(total_sleep_hours / sleep_days, 1) if sleep_days > 0 else None
+
+    # AI 分析
+    ai_analysis = None
+    # 周至少 1 次跑步 + 1 天睡眠，月至少 3 次跑步 + 3 天睡眠
+    min_run = 1 if period == "week" else 3
+    min_sleep = 1 if period == "week" else 3
+
+    if run_count >= min_run and sleep_days >= min_sleep:
+        try:
+            prompt = (
+                f"作为跑步教练，请分析以下数据并给出简要建议（不超过50字）：\n"
+                f"周期：{period}\n"
+                f"日期：{start_date} 至 {end_date}\n"
+                f"跑步次数：{run_count}\n"
+                f"总跑量：{total_distance:.1f}km\n"
+                f"平均速度：{avg_speed or '-'} km/h\n"
+                f"睡眠天数：{sleep_days}\n"
+                f"平均睡眠：{avg_sleep_hours or '-'} 小时"
+            )
+            ai_analysis = gemini.analyze_training(prompt)
+        except Exception as e:
+            logger.warning(f"[PeriodAnalysis] AI analysis failed: {e}")
+
+    return PeriodAnalysisResponse(
+        period=period,
+        start_date=start_date.isoformat(),
+        end_date=end_date.isoformat(),
+        run_count=run_count,
+        total_distance_km=round(total_distance, 1),
+        avg_speed_kmh=avg_speed,
+        sleep_days=sleep_days,
+        avg_sleep_hours=avg_sleep_hours,
+        ai_analysis=ai_analysis,
+    )
+
+
 @app.get("/api/coach/daily-analysis", response_model=DailyAnalysisResponse)
 async def get_daily_analysis(
+    openid: Optional[str] = None,
     target_date: Optional[str] = None,
     force_refresh: bool = False,
     db: Optional[Session] = Depends(get_db_optional),
     report_service: ReportService = Depends(get_report_service),
 ):
+    wechat_user_id = None
+    if openid and db:
+        wechat_user = db.query(WechatUser).filter(WechatUser.openid == openid).one_or_none()
+        if wechat_user:
+            wechat_user_id = wechat_user.id
     """
     获取每日训练分析和 AI 教练建议。
     
@@ -388,7 +514,7 @@ async def get_daily_analysis(
 
     try:
         result = report_service.build_daily_analysis(
-            wechat_user_id=None,
+            wechat_user_id=wechat_user_id,
             analysis_date=analysis_date,
             force_refresh=force_refresh,
             db=db,

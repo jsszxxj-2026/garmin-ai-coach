@@ -2,6 +2,7 @@ import { apiClient } from './client'
 import type {
   DailyAnalysisResponse,
   HomeSummaryResponse,
+  PeriodAnalysisResponse,
   WechatBindGarminRequest,
   WechatBindGarminResponse,
   WechatChatRequest,
@@ -13,18 +14,20 @@ import type {
   WechatUnbindGarminResponse,
 } from '../types'
 
-export const getDailyAnalysis = async () => {
-  return apiClient.get<DailyAnalysisResponse>('/api/coach/daily-analysis')
+export const getDailyAnalysis = async (openid: string) => {
+  return apiClient.get<DailyAnalysisResponse>('/api/coach/daily-analysis', { openid })
 }
 
-export const getDailyAnalysisByDate = async (date: string) => {
-  return apiClient.get<DailyAnalysisResponse>('/api/coach/daily-analysis', {
-    target_date: date,
-  })
+export const getDailyAnalysisByDate = async (openid: string, date: string) => {
+  return apiClient.get<DailyAnalysisResponse>('/api/coach/daily-analysis', { openid, target_date: date })
 }
 
 export const getHomeSummary = async (openid: string) => {
   return apiClient.get<HomeSummaryResponse>('/api/coach/home-summary', { openid })
+}
+
+export const getPeriodAnalysis = async (openid: string, period: string) => {
+  return apiClient.get<PeriodAnalysisResponse>('/api/coach/period-analysis', { openid, period })
 }
 
 export const loginWechat = async (payload: WechatLoginRequest) => {

@@ -123,7 +123,12 @@ class ReportService:
                 data_source = "mock"
             else:
                 if wechat_user_id is None:
-                    raise HTTPException(status_code=400, detail="缺少用户信息")
+                    logger.info("[Report] No wechat_user_id; returning empty report")
+                    return {
+                        "date": analysis_date,
+                        "raw_data_summary": "暂无数据",
+                        "ai_advice": "请先绑定 Garmin 账号",
+                    }
                 if db is None:
                     raise HTTPException(status_code=500, detail="数据库不可用")
 

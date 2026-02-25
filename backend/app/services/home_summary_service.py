@@ -6,8 +6,8 @@ from typing import Any, Dict, Optional
 
 from sqlalchemy.orm import Session
 
-from backend.app.db.crud import get_or_create_user
-from backend.app.db.models import Activity, GarminDailySummary
+from backend.app.db.crud import get_or_create_user, get_garmin_credential
+from backend.app.db.models import Activity, GarminDailySummary, WechatUser, User
 from backend.app.services.gemini_service import GeminiService
 from src.core.config import settings
 
@@ -44,8 +44,22 @@ class HomeSummaryService:
         return {}
 
     def build_summary(self, *, db: Session, wechat_user_id: int) -> Dict[str, Any]:
-        _ = wechat_user_id
-        user = get_or_create_user(db, garmin_email=settings.GARMIN_EMAIL)
+        wechat_user = db.query(WechatUser).filter(WechatUser.id == wechat_user_id).one_or_none()
+        if not wechat_user:
+            logger.warning(f"[HomeSummary] WechatUser {wechat_user_id} not found")
+            return {"latest_run": None, "week_stats": None, "month_stats": None, "ai_brief": None, "updated_at": datetime.utcnow().isoformat()}
+        
+        credential = get_garmin_credential(db, wechat_user_id=wechat_user_id)
+        if not credential:
+            logger.warning(f"[HomeSummary] No Garmin credential for wechat_user {wechat_user_id}")
+            return {"latest_run": None, "week_stats": None, "month_stats": None, "ai_brief": None, "updated_at": datetime.utcnow().isoformat()}
+        
+        # 临时方案：用 Garmin 邮箱查找对应的 User（同一 Garmin 账号）
+        user = db.query(User).filter(User.garmin_email == credential.garmin_email).one_or_none()
+        if not user:
+            logger.warning(f"[HomeSummary] No User found for email {credential.garmin_email}")
+            return {"latest_run": None, "week_stats": None, "month_stats": None, "ai_brief": None, "updated_at": datetime.utcnow().isoformat()}
+        
         today = date.today()
 
         window_start = today - timedelta(days=29)

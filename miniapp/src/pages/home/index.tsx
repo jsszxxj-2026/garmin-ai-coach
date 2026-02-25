@@ -1,56 +1,37 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { View, Text, Button, Input, Switch } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 
 import Error from '../../components/Error'
 import Loading from '../../components/Loading'
 import StatCard from '../../components/StatCard'
-import { bindGarmin, getDailyAnalysis, getHomeSummary, getProfile, unbindGarmin } from '../../api/coach'
-import type { DailyAnalysisResponse, HomeSummaryResponse, WechatProfileResponse } from '../../types'
+import { bindGarmin, getHomeSummary, getPeriodAnalysis, getProfile, unbindGarmin } from '../../api/coach'
+import type { HomeSummaryResponse, PeriodAnalysisResponse, WechatProfileResponse } from '../../types'
 
 import './index.scss'
 
 function Home() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [analysis, setAnalysis] = useState<DailyAnalysisResponse | null>(null)
   const [homeSummary, setHomeSummary] = useState<HomeSummaryResponse | null>(null)
   const [profile, setProfile] = useState<WechatProfileResponse | null>(null)
   const [openid] = useState('local-openid')
   const [garminEmail, setGarminEmail] = useState('')
   const [garminPassword, setGarminPassword] = useState('')
   const [isCn, setIsCn] = useState(false)
-
-  const summaryItems = useMemo(() => {
-    const summary = analysis?.summary
-    if (!summary) {
-      return []
-    }
-    const items = [] as Array<{ title: string; value: string; unit?: string }>
-
-    if (summary.sleep !== undefined && summary.sleep !== null) {
-      items.push({ title: '睡眠', value: String(summary.sleep), unit: '小时' })
-    }
-    if (summary.battery !== undefined && summary.battery !== null) {
-      items.push({ title: '体能电量', value: String(summary.battery), unit: '%' })
-    }
-    if (summary.stress !== undefined && summary.stress !== null) {
-      items.push({ title: '压力', value: String(summary.stress) })
-    }
-    return items
-  }, [analysis])
+  const [showPeriodModal, setShowPeriodModal] = useState(false)
+  const [periodAnalysis, setPeriodAnalysis] = useState<PeriodAnalysisResponse | null>(null)
+  const [periodLoading, setPeriodLoading] = useState(false)
 
   const fetchData = async () => {
     setLoading(true)
     setError(null)
     try {
-      const [profileResponse, analysisResponse, homeSummaryResponse] = await Promise.all([
+      const [profileResponse, homeSummaryResponse] = await Promise.all([
         getProfile(openid),
-        getDailyAnalysis(),
         getHomeSummary(openid),
       ])
       setProfile(profileResponse)
-      setAnalysis(analysisResponse)
       setHomeSummary(homeSummaryResponse)
     } catch (err) {
       setError('获取数据失败')
@@ -90,6 +71,26 @@ function Home() {
 
   const handleAnalysis = () => {
     Taro.navigateTo({ url: '/pages/analysis/index' })
+  }
+
+  const handleLatestRunClick = () => {
+    if (homeSummary?.latest_run?.start_time) {
+      const date = homeSummary.latest_run.start_time.split('T')[0]
+      Taro.navigateTo({ url: `/pages/analysis/index?target_date=${date}` })
+    }
+  }
+
+  const handlePeriodStatsClick = async (period: 'week' | 'month') => {
+    setShowPeriodModal(true)
+    setPeriodLoading(true)
+    try {
+      const data = await getPeriodAnalysis(openid, period)
+      setPeriodAnalysis(data)
+    } catch (err) {
+      Taro.showToast({ title: '获取分析失败', icon: 'none' })
+    } finally {
+      setPeriodLoading(false)
+    }
   }
 
   const handleChat = () => {
@@ -173,33 +174,41 @@ function Home() {
       {latestRun ? (
         <View className='summary'>
           <Text className='section-title'>最近一次跑步</Text>
-          <View className='summary-grid'>
-            <StatCard
-              title='距离'
-              value={String(latestRun.distance_km)}
-              unit='km'
-            />
-            <StatCard
-              title='配速'
-              value={latestRun.avg_pace || '-'}
-            />
-            <StatCard
-              title='强度'
-              value={latestRun.intensity || '-'}
-            />
+          <View className='run-card' onClick={handleLatestRunClick}>
+            <View className='run-card-header'>
+              <Text className='run-card-date'>
+                {latestRun.start_time ? latestRun.start_time.replace('T', ' ').slice(0, 16) : '-'}
+              </Text>
+              <Text className='run-card-intensity'>{latestRun.intensity || '-'}</Text>
+            </View>
+            <View className='run-card-stats'>
+              <View className='run-card-stat'>
+                <Text className='run-card-value'>{String(latestRun.distance_km)}</Text>
+                <Text className='run-card-unit'>km</Text>
+              </View>
+              <View className='run-card-stat'>
+                <Text className='run-card-value'>{latestRun.avg_pace || '-'}</Text>
+                <Text className='run-card-unit'>配速</Text>
+              </View>
+              <View className='run-card-stat'>
+                <Text className='run-card-value'>{latestRun.duration_min || '-'}</Text>
+                <Text className='run-card-unit'>分钟</Text>
+              </View>
+            </View>
           </View>
         </View>
       ) : null}
 
       {weekStats || monthStats ? (
         <View className='summary'>
-          <Text className='section-title'>周/月统计</Text>
+          <Text className='section-title'>周/月统计（点击查看分析）</Text>
           <View className='summary-grid'>
             {weekStats ? (
               <StatCard
                 title='本周跑量'
                 value={String(weekStats.distance_km)}
                 unit='km'
+                onClick={() => handlePeriodStatsClick('week')}
               />
             ) : null}
             {weekStats ? (
@@ -207,6 +216,7 @@ function Home() {
                 title='本周均速'
                 value={weekStats.avg_speed_kmh ? String(weekStats.avg_speed_kmh) : '-'}
                 unit='km/h'
+                onClick={() => handlePeriodStatsClick('week')}
               />
             ) : null}
             {monthStats ? (
@@ -214,6 +224,7 @@ function Home() {
                 title='本月跑量'
                 value={String(monthStats.distance_km)}
                 unit='km'
+                onClick={() => handlePeriodStatsClick('month')}
               />
             ) : null}
             {monthStats ? (
@@ -221,6 +232,7 @@ function Home() {
                 title='本月均速'
                 value={monthStats.avg_speed_kmh ? String(monthStats.avg_speed_kmh) : '-'}
                 unit='km/h'
+                onClick={() => handlePeriodStatsClick('month')}
               />
             ) : null}
           </View>
@@ -241,22 +253,6 @@ function Home() {
         </View>
       ) : null}
 
-      {summaryItems.length ? (
-        <View className='summary'>
-          <Text className='section-title'>今日指标</Text>
-          <View className='summary-grid'>
-            {summaryItems.map((item) => (
-              <StatCard
-                key={item.title}
-                title={item.title}
-                value={item.value}
-                unit={item.unit}
-              />
-            ))}
-          </View>
-        </View>
-      ) : null}
-
       <View className='actions'>
         <Button className='ghost-button' onClick={handleAnalysis}>
           查看详细分析
@@ -265,6 +261,40 @@ function Home() {
           进入聊天
         </Button>
       </View>
+
+      {showPeriodModal && (
+        <View className='modal-mask' onClick={() => setShowPeriodModal(false)}>
+          <View className='modal-content' onClick={(e) => e.stopPropagation()}>
+            <Text className='modal-title'>
+              {periodAnalysis?.period === 'week' ? '本周' : '本月'}分析
+            </Text>
+            {periodLoading ? (
+              <Loading />
+            ) : periodAnalysis ? (
+              <View className='modal-body'>
+                <View className='modal-stats'>
+                  <Text className='modal-label'>跑步次数：{periodAnalysis.run_count} 次</Text>
+                  <Text className='modal-label'>总跑量：{periodAnalysis.total_distance_km} km</Text>
+                  <Text className='modal-label'>平均速度：{periodAnalysis.avg_speed_kmh || '-'} km/h</Text>
+                  <Text className='modal-label'>睡眠天数：{periodAnalysis.sleep_days} 天</Text>
+                  <Text className='modal-label'>平均睡眠：{periodAnalysis.avg_sleep_hours || '-'} 小时</Text>
+                </View>
+                {periodAnalysis.ai_analysis && (
+                  <View className='modal-ai'>
+                    <Text className='modal-ai-title'>AI 分析：</Text>
+                    <Text className='modal-ai-content'>{periodAnalysis.ai_analysis}</Text>
+                  </View>
+                )}
+              </View>
+            ) : (
+              <Text>加载失败</Text>
+            )}
+            <Button className='modal-close' onClick={() => setShowPeriodModal(false)}>
+              关闭
+            </Button>
+          </View>
+        </View>
+      )}
     </View>
   )
 }

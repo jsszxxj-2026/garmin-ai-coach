@@ -38,6 +38,18 @@ export type HomeSummaryResponse = {
   updated_at?: string | null
 }
 
+export type PeriodAnalysisResponse = {
+  period: string
+  start_date: string
+  end_date: string
+  run_count: number
+  total_distance_km: number
+  avg_speed_kmh?: number | null
+  sleep_days: number
+  avg_sleep_hours?: number | null
+  ai_analysis?: string | null
+}
+
 export type WechatLoginRequest = {
   code: string
 }
