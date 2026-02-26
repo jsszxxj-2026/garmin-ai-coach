@@ -68,14 +68,15 @@ def poll_garmin_for_user(
     sync_state = get_or_create_sync_state(db, wechat_user_id=wechat_user.id)
     latest_snapshot = _build_latest_snapshot()
 
-    if not detect_new_data(
-        {
-            "last_activity_id": sync_state.last_activity_id,
-            "last_summary_date": sync_state.last_summary_date.isoformat() if sync_state.last_summary_date else None,
-        },
-        latest_snapshot,
-    ):
-        return
+    # 强制每次都执行同步
+    # if not detect_new_data(
+    #     {
+    #         "last_activity_id": sync_state.last_activity_id,
+    #         "last_summary_date": sync_state.last_summary_date.isoformat() if sync_state.last_summary_date else None,
+    #     },
+    #     latest_snapshot,
+    # ):
+    #     return
 
     analysis_date = latest_snapshot.get("latest_summary_date") or datetime.now().date().isoformat()
 
