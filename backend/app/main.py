@@ -34,6 +34,7 @@ from backend.app.services.data_processor import DataProcessor
 from backend.app.services.gemini_service import GeminiService
 from backend.app.services.home_summary_service import HomeSummaryService
 from backend.app.services.report_service import ReportService
+from backend.app.jobs.scheduler import start_scheduler
 from backend.app.db.crud import get_home_summary
 from backend.app.db.models import WechatUser
 from backend.app.db.session import get_db_optional, init_db
@@ -50,6 +51,8 @@ app = FastAPI(
 
 app.include_router(wechat_router)
 
+_scheduler = None
+
 
 @app.on_event("startup")
 def _startup() -> None:
@@ -57,6 +60,25 @@ def _startup() -> None:
         init_db()
     except Exception as e:
         logger.error(f"[DB] Startup init failed: {e}")
+
+    global _scheduler
+    if settings.ENABLE_GARMIN_POLLING:
+        try:
+            _scheduler = start_scheduler()
+        except Exception as e:
+            logger.error(f"[Scheduler] Startup failed: {e}")
+
+
+@app.on_event("shutdown")
+def _shutdown() -> None:
+    global _scheduler
+    if _scheduler is not None:
+        try:
+            _scheduler.shutdown(wait=False)
+        except Exception as e:
+            logger.warning(f"[Scheduler] Shutdown failed: {e}")
+        finally:
+            _scheduler = None
 
 # CORS 中间件配置
 app.add_middleware(

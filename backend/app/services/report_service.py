@@ -51,12 +51,19 @@ class ReportService:
     ) -> dict[str, Any]:
         request_start_time = time.time()
         analysis_date_obj = datetime.strptime(analysis_date, "%Y-%m-%d").date()
+        credential = None
+        if db is not None and wechat_user_id is not None:
+            credential = get_garmin_credential(db, wechat_user_id=wechat_user_id)
+
+        garmin_identity_email = settings.GARMIN_EMAIL
+        if credential is not None and credential.garmin_email:
+            garmin_identity_email = credential.garmin_email
 
         db_user_id: Optional[int] = None
         cache_hours = max(int(settings.ANALYSIS_CACHE_HOURS), 0)
         if db is not None:
             try:
-                user = get_or_create_user(db, garmin_email=settings.GARMIN_EMAIL)
+                user = get_or_create_user(db, garmin_email=garmin_identity_email)
                 db_user_id = user.id
                 if not force_refresh:
                     cached = get_cached_analysis(db, user_id=db_user_id, analysis_date=analysis_date_obj)
@@ -132,7 +139,6 @@ class ReportService:
                 if db is None:
                     raise HTTPException(status_code=500, detail="数据库不可用")
 
-                credential = get_garmin_credential(db, wechat_user_id=wechat_user_id)
                 if credential is None:
                     raise HTTPException(status_code=404, detail="Garmin 未绑定")
 

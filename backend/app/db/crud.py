@@ -164,15 +164,50 @@ def log_notification(
     status: Optional[str] = None,
     error_message: Optional[str] = None,
 ) -> NotificationLog:
+    existing = (
+        db.query(NotificationLog)
+        .filter(NotificationLog.wechat_user_id == wechat_user_id)
+        .filter(NotificationLog.event_type == event_type)
+        .filter(NotificationLog.event_key == event_key)
+        .one_or_none()
+    )
+    sent_at = datetime.utcnow() if status == "sent" else None
+
+    if existing:
+        existing.status = status
+        existing.error_message = error_message
+        if sent_at is not None:
+            existing.sent_at = sent_at
+        return existing
+
     row = NotificationLog(
         wechat_user_id=wechat_user_id,
         event_type=event_type,
         event_key=event_key,
         status=status,
         error_message=error_message,
+        sent_at=sent_at,
     )
     db.add(row)
     return row
+
+
+def has_notification_sent(
+    db: Session,
+    *,
+    wechat_user_id: int,
+    event_type: str,
+    event_key: str,
+) -> bool:
+    row = (
+        db.query(NotificationLog)
+        .filter(NotificationLog.wechat_user_id == wechat_user_id)
+        .filter(NotificationLog.event_type == event_type)
+        .filter(NotificationLog.event_key == event_key)
+        .filter(NotificationLog.status == "sent")
+        .one_or_none()
+    )
+    return row is not None
 
 
 def get_home_summary(db: Session, *, wechat_user_id: int) -> Optional[HomeSummary]:

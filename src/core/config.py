@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     # Runtime behavior
     USE_MOCK_MODE: bool = False
     ANALYSIS_CACHE_HOURS: int = 24
+    ENABLE_GARMIN_POLLING: bool = False
+    GARMIN_POLL_INTERVAL_MINUTES: int = 30
     
     class Config:
         env_file = ".env"

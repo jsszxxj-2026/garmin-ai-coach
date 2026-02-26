@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, Dict, Optional
 
 from sqlalchemy.orm import Session
 
 from backend.app.db.crud import (
     get_or_create_sync_state,
+    has_notification_sent,
     log_notification,
     get_garmin_credential,
     upsert_home_summary,
@@ -68,15 +69,16 @@ def poll_garmin_for_user(
     sync_state = get_or_create_sync_state(db, wechat_user_id=wechat_user.id)
     latest_snapshot = _build_latest_snapshot()
 
-    # 强制每次都执行同步
-    # if not detect_new_data(
-    #     {
-    #         "last_activity_id": sync_state.last_activity_id,
-    #         "last_summary_date": sync_state.last_summary_date.isoformat() if sync_state.last_summary_date else None,
-    #     },
-    #     latest_snapshot,
-    # ):
-    #     return
+    if not detect_new_data(
+        {
+            "last_activity_id": sync_state.last_activity_id,
+            "last_summary_date": sync_state.last_summary_date.isoformat() if sync_state.last_summary_date else None,
+        },
+        latest_snapshot,
+    ):
+        sync_state.last_poll_at = datetime.utcnow()
+        db.commit()
+        return
 
     analysis_date = latest_snapshot.get("latest_summary_date") or datetime.now().date().isoformat()
 
@@ -98,10 +100,20 @@ def poll_garmin_for_user(
     )
 
     sync_state.last_summary_date = datetime.strptime(analysis_date, "%Y-%m-%d").date()
+    sync_state.last_activity_id = latest_snapshot.get("latest_activity_id")
     sync_state.last_poll_at = datetime.utcnow()
     db.commit()
 
     event_key = f"daily:{analysis_date}"
+    if has_notification_sent(
+        db,
+        wechat_user_id=wechat_user.id,
+        event_type="daily_report",
+        event_key=event_key,
+    ):
+        logger.info(f"[Poll] notification already sent, skip: user={wechat_user.id}, key={event_key}")
+        return
+
     try:
         summary = result.get("ai_advice") or "报告已生成"
         wechat_service.send_subscribe_message(
