@@ -63,11 +63,20 @@ def get_db_optional() -> Generator[Optional[Session], None, None]:
         yield None
         return
 
+    db: Optional[Session] = None
     try:
-        yield from get_db()
+        SessionLocal = get_sessionmaker()
+        db = SessionLocal()
     except Exception as e:
         logger.error(f"[DB] Failed to create session: {e}")
         yield None
+        return
+
+    try:
+        yield db
+    finally:
+        if db is not None:
+            db.close()
 
 
 def init_db() -> bool:
