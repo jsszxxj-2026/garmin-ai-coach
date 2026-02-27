@@ -357,15 +357,24 @@ async def get_home_summary_endpoint(
     if not wechat_user:
         raise HTTPException(status_code=404, detail="用户不存在")
 
+    cached = get_home_summary(db, wechat_user_id=wechat_user.id)
     try:
-        summary = home_summary_service.build_summary(db=db, wechat_user_id=wechat_user.id)
+        summary = home_summary_service.build_summary(
+            db=db,
+            wechat_user_id=wechat_user.id,
+            include_ai_brief=False,
+        )
+        ai_brief_to_save = summary.get("ai_brief")
+        if ai_brief_to_save is None and cached is not None:
+            ai_brief_to_save = cached.ai_brief_json
+
         upsert_home_summary(
             db,
             wechat_user_id=wechat_user.id,
             latest_run_json=summary.get("latest_run"),
             week_stats_json=summary.get("week_stats"),
             month_stats_json=summary.get("month_stats"),
-            ai_brief_json=summary.get("ai_brief"),
+            ai_brief_json=ai_brief_to_save,
         )
         db.commit()
 
@@ -373,13 +382,12 @@ async def get_home_summary_endpoint(
             latest_run=summary.get("latest_run"),
             week_stats=summary.get("week_stats"),
             month_stats=summary.get("month_stats"),
-            ai_brief=summary.get("ai_brief"),
+            ai_brief=ai_brief_to_save,
             updated_at=summary.get("updated_at"),
         )
     except Exception as e:
         db.rollback()
         logger.warning(f"[HomeSummary] rebuild failed, fallback to cache: {e}")
-        cached = get_home_summary(db, wechat_user_id=wechat_user.id)
         if cached:
             return HomeSummaryResponse(
                 latest_run=cached.latest_run_json,

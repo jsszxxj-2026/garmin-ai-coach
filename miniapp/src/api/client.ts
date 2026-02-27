@@ -17,6 +17,7 @@ export const apiClient = {
       url: normalizeUrl(getApiBase(), path),
       method: 'GET',
       data: params,
+      timeout: 15000,
     })
     return response.data as T
   },
@@ -25,6 +26,7 @@ export const apiClient = {
       url: normalizeUrl(getApiBase(), path),
       method: 'POST',
       data,
+      timeout: 15000,
     })
     return response.data as T
   },

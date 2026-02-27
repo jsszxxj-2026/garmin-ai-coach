@@ -91,7 +91,11 @@ def poll_garmin_for_user(
         db=db,
     )
 
-    home_summary_payload = home_summary_service.build_summary(db=db, wechat_user_id=wechat_user.id)
+    home_summary_payload = home_summary_service.build_summary(
+        db=db,
+        wechat_user_id=wechat_user.id,
+        include_ai_brief=True,
+    )
     upsert_home_summary(
         db,
         wechat_user_id=wechat_user.id,

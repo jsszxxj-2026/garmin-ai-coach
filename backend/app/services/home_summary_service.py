@@ -43,7 +43,13 @@ class HomeSummaryService:
             return {}
         return {}
 
-    def build_summary(self, *, db: Session, wechat_user_id: int) -> Dict[str, Any]:
+    def build_summary(
+        self,
+        *,
+        db: Session,
+        wechat_user_id: int,
+        include_ai_brief: bool = True,
+    ) -> Dict[str, Any]:
         wechat_user = db.query(WechatUser).filter(WechatUser.id == wechat_user_id).one_or_none()
         if not wechat_user:
             logger.warning(f"[HomeSummary] WechatUser {wechat_user_id} not found")
@@ -76,12 +82,14 @@ class HomeSummaryService:
 
         sleep_days = self._count_sleep_days(db, user_id=user.id, start_date=window_start, end_date=today)
         run_count = len(runs_30)
-        ai_brief = self._build_ai_brief(
-            run_count=run_count,
-            sleep_days=sleep_days,
-            week_stats=week_stats,
-            month_stats=month_stats,
-        )
+        ai_brief: Dict[str, Optional[str]] | None = None
+        if include_ai_brief:
+            ai_brief = self._build_ai_brief(
+                run_count=run_count,
+                sleep_days=sleep_days,
+                week_stats=week_stats,
+                month_stats=month_stats,
+            )
 
         return {
             "latest_run": latest_run,
