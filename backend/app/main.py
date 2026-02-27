@@ -364,9 +364,6 @@ async def get_home_summary_endpoint(
             wechat_user_id=wechat_user.id,
             include_ai_brief=False,
         )
-        ai_brief_to_save = summary.get("ai_brief")
-        if ai_brief_to_save is None and cached is not None:
-            ai_brief_to_save = cached.ai_brief_json
 
         upsert_home_summary(
             db,
@@ -374,7 +371,7 @@ async def get_home_summary_endpoint(
             latest_run_json=summary.get("latest_run"),
             week_stats_json=summary.get("week_stats"),
             month_stats_json=summary.get("month_stats"),
-            ai_brief_json=ai_brief_to_save,
+            ai_brief_json=None,
         )
         db.commit()
 
@@ -382,7 +379,7 @@ async def get_home_summary_endpoint(
             latest_run=summary.get("latest_run"),
             week_stats=summary.get("week_stats"),
             month_stats=summary.get("month_stats"),
-            ai_brief=ai_brief_to_save,
+            ai_brief=None,
             updated_at=summary.get("updated_at"),
         )
     except Exception as e:
@@ -393,7 +390,7 @@ async def get_home_summary_endpoint(
                 latest_run=cached.latest_run_json,
                 week_stats=cached.week_stats_json,
                 month_stats=cached.month_stats_json,
-                ai_brief=cached.ai_brief_json,
+                ai_brief=None,
                 updated_at=cached.updated_at.isoformat() if cached.updated_at else None,
             )
         raise HTTPException(status_code=500, detail="首页摘要生成失败")

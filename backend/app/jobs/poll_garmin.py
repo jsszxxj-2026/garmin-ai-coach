@@ -94,7 +94,7 @@ def poll_garmin_for_user(
     home_summary_payload = home_summary_service.build_summary(
         db=db,
         wechat_user_id=wechat_user.id,
-        include_ai_brief=True,
+        include_ai_brief=False,
     )
     upsert_home_summary(
         db,
@@ -102,7 +102,7 @@ def poll_garmin_for_user(
         latest_run_json=home_summary_payload.get("latest_run"),
         week_stats_json=home_summary_payload.get("week_stats"),
         month_stats_json=home_summary_payload.get("month_stats"),
-        ai_brief_json=home_summary_payload.get("ai_brief"),
+        ai_brief_json=None,
     )
 
     sync_state.last_summary_date = datetime.strptime(analysis_date, "%Y-%m-%d").date()
