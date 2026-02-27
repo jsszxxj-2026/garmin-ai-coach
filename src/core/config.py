@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     ANALYSIS_CACHE_HOURS: int = 24
     ENABLE_GARMIN_POLLING: bool = False
     GARMIN_POLL_INTERVAL_MINUTES: int = 30
+    INITIAL_BIND_BACKFILL_DAYS: int = 30
     
     class Config:
         env_file = ".env"

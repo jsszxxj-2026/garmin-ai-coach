@@ -4,7 +4,7 @@ import logging
 from typing import Optional
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -13,9 +13,10 @@ from backend.app.db.crud import (
     get_or_create_wechat_user,
     upsert_garmin_credential,
 )
-from backend.app.db.session import get_db
+from backend.app.db.session import get_db, get_sessionmaker
 from backend.app.services.chat_service import ChatService
 from backend.app.services.garmin_client import GarminClient
+from backend.app.services.report_service import ReportService
 from backend.app.utils.crypto import encrypt_text
 from src.core.config import settings
 
@@ -43,6 +44,8 @@ class GarminBindRequest(BaseModel):
 
 class GarminBindResponse(BaseModel):
     bound: bool
+    backfill_started: bool = False
+    backfill_days: int = 0
 
 
 class GarminProfileResponse(BaseModel):
@@ -63,6 +66,22 @@ class ChatResponse(BaseModel):
 
 class GarminUnbindRequest(BaseModel):
     openid: str
+
+
+def _run_initial_backfill(wechat_user_id: int, days: int) -> None:
+    db = get_sessionmaker()()
+    try:
+        report_service = ReportService()
+        result = report_service.sync_recent_history(
+            wechat_user_id=wechat_user_id,
+            days=days,
+            db=db,
+        )
+        logger.info(f"[Backfill] completed for wechat_user_id={wechat_user_id}: {result}")
+    except Exception as e:
+        logger.warning(f"[Backfill] failed for wechat_user_id={wechat_user_id}: {e}")
+    finally:
+        db.close()
 
 
 def _wechat_code_to_session(code: str) -> dict:
@@ -102,11 +121,16 @@ def wechat_login(payload: WechatLoginRequest, db: Session = Depends(get_db)) -> 
 
 
 @router.post("/bind-garmin", response_model=GarminBindResponse)
-def bind_garmin(payload: GarminBindRequest, db: Session = Depends(get_db)) -> GarminBindResponse:
+def bind_garmin(
+    payload: GarminBindRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> GarminBindResponse:
     if not payload.garmin_email or not payload.garmin_password:
         raise HTTPException(status_code=400, detail="Garmin 账号或密码为空")
 
     wechat_user = get_or_create_wechat_user(db, openid=payload.openid)
+    existing_credential = get_garmin_credential(db, wechat_user_id=wechat_user.id)
 
     try:
         GarminClient(email=payload.garmin_email, password=payload.garmin_password, is_cn=payload.is_cn)
@@ -122,7 +146,17 @@ def bind_garmin(payload: GarminBindRequest, db: Session = Depends(get_db)) -> Ga
         is_cn=payload.is_cn,
     )
     db.commit()
-    return GarminBindResponse(bound=True)
+
+    backfill_days = max(int(settings.INITIAL_BIND_BACKFILL_DAYS), 0)
+    should_backfill = existing_credential is None and backfill_days > 0
+    if should_backfill:
+        background_tasks.add_task(_run_initial_backfill, wechat_user.id, backfill_days)
+
+    return GarminBindResponse(
+        bound=True,
+        backfill_started=should_backfill,
+        backfill_days=backfill_days if should_backfill else 0,
+    )
 
 
 @router.post("/unbind-garmin")

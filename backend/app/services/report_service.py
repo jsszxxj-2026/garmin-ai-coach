@@ -293,6 +293,99 @@ class ReportService:
             "charts": charts_data,
         }
 
+    def sync_recent_history(
+        self,
+        *,
+        wechat_user_id: int,
+        days: int,
+        db: Session,
+    ) -> dict[str, int]:
+        if days <= 0:
+            return {
+                "days_requested": 0,
+                "days_processed": 0,
+                "days_with_data": 0,
+                "days_failed": 0,
+                "activities_synced": 0,
+                "health_days_synced": 0,
+            }
+
+        credential = get_garmin_credential(db, wechat_user_id=wechat_user_id)
+        if credential is None:
+            raise RuntimeError("Garmin 未绑定，无法执行历史回填")
+
+        garmin_password = decrypt_text(credential.garmin_password)
+        user = get_or_create_user(db, garmin_email=credential.garmin_email)
+        db_user_id = user.id
+
+        garmin_client = GarminClient(
+            email=credential.garmin_email,
+            password=garmin_password,
+            is_cn=bool(credential.is_cn),
+        )
+        garmin_service = GarminService(credential.garmin_email, garmin_password)
+
+        summary = {
+            "days_requested": int(days),
+            "days_processed": 0,
+            "days_with_data": 0,
+            "days_failed": 0,
+            "activities_synced": 0,
+            "health_days_synced": 0,
+        }
+
+        today = datetime.now().date()
+        for offset in range(days):
+            target_date = today - timedelta(days=offset)
+            target_date_str = target_date.isoformat()
+            summary["days_processed"] += 1
+
+            raw_activities: List[Dict[str, Any]] = []
+            raw_health: Optional[Dict[str, Any]] = None
+
+            try:
+                try:
+                    daily_data = garmin_service.get_daily_data(target_date_str)
+                    activities = daily_data.get("activities") or []
+                    if activities:
+                        raw_activities = [a for a in activities if isinstance(a, dict)]
+                except Exception:
+                    raw_activities = []
+
+                try:
+                    health_data = garmin_client.get_health_stats(target_date_str)
+                    if health_data:
+                        raw_health = health_data
+                except Exception:
+                    raw_health = None
+
+                day_has_data = False
+                if raw_health:
+                    upsert_daily_summary(db, user_id=db_user_id, health=raw_health, summary_date=target_date)
+                    summary["health_days_synced"] += 1
+                    day_has_data = True
+
+                if raw_activities:
+                    saved_activities = upsert_activities(
+                        db,
+                        user_id=db_user_id,
+                        activities=raw_activities,
+                        fallback_date=target_date,
+                    )
+                    summary["activities_synced"] += len(saved_activities)
+                    day_has_data = True
+
+                if day_has_data:
+                    summary["days_with_data"] += 1
+
+                db.commit()
+            except Exception as e:
+                db.rollback()
+                summary["days_failed"] += 1
+                logger.warning(f"[Backfill] day sync failed: date={target_date_str}, error={e}")
+
+        return summary
+
 
 def _convert_activity_for_processor(activity: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(activity, dict) or "metrics" not in activity:
