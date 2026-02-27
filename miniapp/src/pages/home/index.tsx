@@ -17,7 +17,7 @@ function Home() {
   const [profile, setProfile] = useState<WechatProfileResponse | null>(null)
   const [garminEmail, setGarminEmail] = useState('')
   const [garminPassword, setGarminPassword] = useState('')
-  const [isCn, setIsCn] = useState(false)
+  const [isCn, setIsCn] = useState(true)
   const [showPeriodModal, setShowPeriodModal] = useState(false)
   const [periodAnalysis, setPeriodAnalysis] = useState<PeriodAnalysisResponse | null>(null)
   const [periodLoading, setPeriodLoading] = useState(false)
