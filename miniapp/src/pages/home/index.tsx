@@ -27,18 +27,28 @@ function Home() {
   const fetchData = async () => {
     setLoading(true)
     setError(null)
-    try {
-      const [profileResponse, homeSummaryResponse] = await Promise.all([
-        getProfile(openid),
-        getHomeSummary(openid),
-      ])
-      setProfile(profileResponse)
-      setHomeSummary(homeSummaryResponse)
-    } catch (err) {
-      setError('获取数据失败')
-    } finally {
-      setLoading(false)
+    const [profileResult, summaryResult] = await Promise.allSettled([
+      getProfile(openid),
+      getHomeSummary(openid),
+    ])
+
+    if (profileResult.status === 'fulfilled') {
+      setProfile(profileResult.value)
+    } else {
+      setProfile(null)
     }
+
+    if (summaryResult.status === 'fulfilled') {
+      setHomeSummary(summaryResult.value)
+    } else {
+      setHomeSummary(null)
+    }
+
+    if (profileResult.status === 'rejected' || summaryResult.status === 'rejected') {
+      setError('获取数据失败')
+    }
+
+    setLoading(false)
   }
 
   useEffect(() => {

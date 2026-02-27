@@ -5,6 +5,7 @@ Gemini Service
 import json
 import logging
 import os
+import re
 import time
 from typing import Optional
 
@@ -124,6 +125,44 @@ class GeminiService:
                 raise
         
         return self._model
+
+    @staticmethod
+    def _parse_json_payload(text: str) -> Optional[dict]:
+        raw = (text or "").strip()
+        if not raw:
+            return None
+
+        # 1) direct JSON
+        try:
+            data = json.loads(raw)
+            if isinstance(data, dict):
+                return data
+        except Exception:
+            pass
+
+        # 2) fenced code block ```json ... ```
+        fenced = re.search(r"```(?:json)?\s*([\s\S]*?)```", raw, re.IGNORECASE)
+        if fenced:
+            candidate = fenced.group(1).strip()
+            try:
+                data = json.loads(candidate)
+                if isinstance(data, dict):
+                    return data
+            except Exception:
+                pass
+
+        # 3) first {...} object
+        first = raw.find("{")
+        last = raw.rfind("}")
+        if first != -1 and last > first:
+            candidate = raw[first:last + 1]
+            try:
+                data = json.loads(candidate)
+                if isinstance(data, dict):
+                    return data
+            except Exception:
+                return None
+        return None
 
     def analyze_training(self, daily_report_md: str) -> str:
         """
@@ -301,7 +340,9 @@ class GeminiService:
 
         try:
             result_text = self.analyze_training(prompt)
-            data = json.loads(result_text)
+            data = self._parse_json_payload(result_text)
+            if not isinstance(data, dict):
+                raise ValueError("Gemini 返回非 JSON 内容")
             week = data.get("week") if isinstance(data, dict) else None
             month = data.get("month") if isinstance(data, dict) else None
             return {
