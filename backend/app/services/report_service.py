@@ -55,13 +55,21 @@ class ReportService:
         if db is not None and wechat_user_id is not None:
             credential = get_garmin_credential(db, wechat_user_id=wechat_user_id)
 
-        garmin_identity_email = settings.GARMIN_EMAIL
+        if wechat_user_id is not None:
+            if db is None:
+                raise HTTPException(status_code=500, detail="数据库不可用")
+            if not settings.USE_MOCK_MODE and credential is None:
+                raise HTTPException(status_code=403, detail="请先绑定 Garmin 账号")
+
+        garmin_identity_email: Optional[str] = None
         if credential is not None and credential.garmin_email:
             garmin_identity_email = credential.garmin_email
+        elif wechat_user_id is None:
+            garmin_identity_email = settings.GARMIN_EMAIL
 
         db_user_id: Optional[int] = None
         cache_hours = max(int(settings.ANALYSIS_CACHE_HOURS), 0)
-        if db is not None:
+        if db is not None and garmin_identity_email:
             try:
                 user = get_or_create_user(db, garmin_email=garmin_identity_email)
                 db_user_id = user.id
@@ -129,18 +137,8 @@ class ReportService:
                     raw_activities_new = [mock_activity]
                 data_source = "mock"
             else:
-                if wechat_user_id is None:
-                    logger.info("[Report] No wechat_user_id; returning empty report")
-                    return {
-                        "date": analysis_date,
-                        "raw_data_summary": "暂无数据",
-                        "ai_advice": "请先绑定 Garmin 账号",
-                    }
-                if db is None:
-                    raise HTTPException(status_code=500, detail="数据库不可用")
-
                 if credential is None:
-                    raise HTTPException(status_code=404, detail="Garmin 未绑定")
+                    raise HTTPException(status_code=403, detail="请先绑定 Garmin 账号")
 
                 garmin_password = decrypt_text(credential.garmin_password)
                 garmin_client = GarminClient(

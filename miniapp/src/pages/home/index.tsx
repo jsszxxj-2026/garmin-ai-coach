@@ -79,6 +79,10 @@ function Home() {
   }
 
   const handleAnalysis = () => {
+    if (!isBound) {
+      Taro.showToast({ title: '请先绑定 Garmin 账号', icon: 'none' })
+      return
+    }
     Taro.navigateTo({ url: '/pages/analysis/index' })
   }
 
