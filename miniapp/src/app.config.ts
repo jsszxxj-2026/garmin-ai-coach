@@ -13,6 +13,6 @@ export default defineAppConfig({
     ],
   },
   window: {
-    navigationBarTitleText: 'Taro Miniapp',
+    navigationBarTitleText: 'PaceMind',
   },
 })

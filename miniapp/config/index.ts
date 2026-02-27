@@ -6,7 +6,7 @@ import prod from './prod'
 
 export default defineConfig(async () => {
   const config: UserConfigExport = {
-    projectName: 'miniapp',
+    projectName: 'PaceMind',
     date: '2026-02-13',
     designWidth: 750,
     deviceRatio: {

@@ -35,7 +35,7 @@ from backend.app.services.gemini_service import GeminiService
 from backend.app.services.home_summary_service import HomeSummaryService
 from backend.app.services.report_service import ReportService
 from backend.app.jobs.scheduler import start_scheduler
-from backend.app.db.crud import get_home_summary
+from backend.app.db.crud import get_home_summary, upsert_home_summary
 from backend.app.db.models import WechatUser
 from backend.app.db.session import get_db_optional, init_db
 from src.services.garmin_service import GarminService
@@ -357,24 +357,38 @@ async def get_home_summary_endpoint(
     if not wechat_user:
         raise HTTPException(status_code=404, detail="用户不存在")
 
-    cached = get_home_summary(db, wechat_user_id=wechat_user.id)
-    if cached:
-        return HomeSummaryResponse(
-            latest_run=cached.latest_run_json,
-            week_stats=cached.week_stats_json,
-            month_stats=cached.month_stats_json,
-            ai_brief=cached.ai_brief_json,
-            updated_at=cached.updated_at.isoformat() if cached.updated_at else None,
+    try:
+        summary = home_summary_service.build_summary(db=db, wechat_user_id=wechat_user.id)
+        upsert_home_summary(
+            db,
+            wechat_user_id=wechat_user.id,
+            latest_run_json=summary.get("latest_run"),
+            week_stats_json=summary.get("week_stats"),
+            month_stats_json=summary.get("month_stats"),
+            ai_brief_json=summary.get("ai_brief"),
         )
+        db.commit()
 
-    summary = home_summary_service.build_summary(db=db, wechat_user_id=wechat_user.id)
-    return HomeSummaryResponse(
-        latest_run=summary.get("latest_run"),
-        week_stats=summary.get("week_stats"),
-        month_stats=summary.get("month_stats"),
-        ai_brief=summary.get("ai_brief"),
-        updated_at=summary.get("updated_at"),
-    )
+        return HomeSummaryResponse(
+            latest_run=summary.get("latest_run"),
+            week_stats=summary.get("week_stats"),
+            month_stats=summary.get("month_stats"),
+            ai_brief=summary.get("ai_brief"),
+            updated_at=summary.get("updated_at"),
+        )
+    except Exception as e:
+        db.rollback()
+        logger.warning(f"[HomeSummary] rebuild failed, fallback to cache: {e}")
+        cached = get_home_summary(db, wechat_user_id=wechat_user.id)
+        if cached:
+            return HomeSummaryResponse(
+                latest_run=cached.latest_run_json,
+                week_stats=cached.week_stats_json,
+                month_stats=cached.month_stats_json,
+                ai_brief=cached.ai_brief_json,
+                updated_at=cached.updated_at.isoformat() if cached.updated_at else None,
+            )
+        raise HTTPException(status_code=500, detail="首页摘要生成失败")
 
 
 @app.get("/api/coach/period-analysis", response_model=PeriodAnalysisResponse)

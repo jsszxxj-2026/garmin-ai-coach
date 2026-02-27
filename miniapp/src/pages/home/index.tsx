@@ -22,6 +22,7 @@ function Home() {
   const [showPeriodModal, setShowPeriodModal] = useState(false)
   const [periodAnalysis, setPeriodAnalysis] = useState<PeriodAnalysisResponse | null>(null)
   const [periodLoading, setPeriodLoading] = useState(false)
+  const [activePeriod, setActivePeriod] = useState<'week' | 'month'>('week')
 
   const fetchData = async () => {
     setLoading(true)
@@ -81,6 +82,8 @@ function Home() {
   }
 
   const handlePeriodStatsClick = async (period: 'week' | 'month') => {
+    setActivePeriod(period)
+    setPeriodAnalysis(null)
     setShowPeriodModal(true)
     setPeriodLoading(true)
     try {
@@ -266,7 +269,7 @@ function Home() {
         <View className='modal-mask' onClick={() => setShowPeriodModal(false)}>
           <View className='modal-content' onClick={(e) => e.stopPropagation()}>
             <Text className='modal-title'>
-              {periodAnalysis?.period === 'week' ? '本周' : '本月'}分析
+              {activePeriod === 'week' ? '本周' : '本月'}分析
             </Text>
             {periodLoading ? (
               <Loading />
