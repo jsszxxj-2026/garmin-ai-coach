@@ -174,6 +174,13 @@ class ReportService:
 
                 data_source = "garmin"
 
+                # ====== 调试日志：检查获取到的数据 ======
+                logger.info(f"[DEBUG] 获取到活动数量: {len(raw_activities_new)}")
+                if raw_activities_new:
+                    logger.info(f"[DEBUG] 活动样本: {raw_activities_new[0]}")
+                logger.info(f"[DEBUG] db_user_id: {db_user_id}, data_source: {data_source}")
+                # ====== 调试日志结束 ======
+
         activity_md, health_md, plan_md, converted_activities = _build_context_from_raw(
             processor=self.processor,
             raw_activities_new=raw_activities_new,
@@ -181,12 +188,18 @@ class ReportService:
             raw_plan=raw_plan,
         )
 
+        # ====== 调试日志：检查保存条件 ======
+        logger.info(f"[DEBUG] 保存条件检查: db={db is not None}, db_user_id={db_user_id}, data_source={data_source}")
+        logger.info(f"[DEBUG] raw_activities_new 数量: {len(raw_activities_new) if raw_activities_new else 0}")
+        # ====== 调试日志结束 ======
+
         if db is not None and db_user_id is not None and data_source in ("garmin", "mock"):
             try:
                 if raw_health:
                     upsert_daily_summary(db, user_id=db_user_id, health=raw_health, summary_date=analysis_date_obj)
                 if raw_activities_new:
-                    upsert_activities(db, user_id=db_user_id, activities=raw_activities_new, fallback_date=analysis_date_obj)
+                    saved_count = upsert_activities(db, user_id=db_user_id, activities=raw_activities_new, fallback_date=analysis_date_obj)
+                    logger.info(f"[DEBUG] 成功保存活动数量: {len(saved_count) if saved_count else 0}")
                 if raw_plan:
                     upsert_training_plans(db, user_id=db_user_id, plans=raw_plan)
                 db.commit()
