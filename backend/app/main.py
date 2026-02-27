@@ -29,6 +29,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.app.api.wechat import router as wechat_router
+from backend.app.deps.auth import get_current_wechat_user
 from backend.app.services.garmin_client import GarminClient
 from backend.app.services.data_processor import DataProcessor
 from backend.app.services.gemini_service import GeminiService
@@ -346,28 +347,24 @@ async def health_check():
 
 @app.get("/api/coach/home-summary", response_model=HomeSummaryResponse)
 async def get_home_summary_endpoint(
-    openid: str,
     db: Optional[Session] = Depends(get_db_optional),
+    current_user: WechatUser = Depends(get_current_wechat_user),
     home_summary_service: HomeSummaryService = Depends(get_home_summary_service),
 ):
     if not db:
         raise HTTPException(status_code=500, detail="数据库不可用")
 
-    wechat_user = db.query(WechatUser).filter(WechatUser.openid == openid).one_or_none()
-    if not wechat_user:
-        raise HTTPException(status_code=404, detail="用户不存在")
-
-    cached = get_home_summary(db, wechat_user_id=wechat_user.id)
+    cached = get_home_summary(db, wechat_user_id=current_user.id)
     try:
         summary = home_summary_service.build_summary(
             db=db,
-            wechat_user_id=wechat_user.id,
+            wechat_user_id=current_user.id,
             include_ai_brief=False,
         )
 
         upsert_home_summary(
             db,
-            wechat_user_id=wechat_user.id,
+            wechat_user_id=current_user.id,
             latest_run_json=summary.get("latest_run"),
             week_stats_json=summary.get("week_stats"),
             month_stats_json=summary.get("month_stats"),
@@ -398,17 +395,13 @@ async def get_home_summary_endpoint(
 
 @app.get("/api/coach/period-analysis", response_model=PeriodAnalysisResponse)
 async def get_period_analysis(
-    openid: str,
     period: str,  # "week" or "month"
     db: Optional[Session] = Depends(get_db_optional),
+    current_user: WechatUser = Depends(get_current_wechat_user),
     gemini: GeminiService = Depends(get_gemini_service),
 ):
     if not db:
         raise HTTPException(status_code=500, detail="数据库不可用")
-
-    wechat_user = db.query(WechatUser).filter(WechatUser.openid == openid).one_or_none()
-    if not wechat_user:
-        raise HTTPException(status_code=404, detail="用户不存在")
 
     from datetime import date, timedelta
     today = date.today()
@@ -427,7 +420,7 @@ async def get_period_analysis(
     from backend.app.db.models import User, Activity, GarminDailySummary
     from sqlalchemy import func
 
-    credential = get_garmin_credential(db, wechat_user_id=wechat_user.id)
+    credential = get_garmin_credential(db, wechat_user_id=current_user.id)
     if not credential:
         raise HTTPException(status_code=404, detail="Garmin 未绑定")
 
@@ -506,17 +499,15 @@ async def get_period_analysis(
 
 @app.get("/api/coach/daily-analysis", response_model=DailyAnalysisResponse)
 async def get_daily_analysis(
-    openid: Optional[str] = None,
     target_date: Optional[str] = None,
     force_refresh: bool = False,
     db: Optional[Session] = Depends(get_db_optional),
+    current_user: WechatUser = Depends(get_current_wechat_user),
     report_service: ReportService = Depends(get_report_service),
 ):
-    wechat_user_id = None
-    if openid and db:
-        wechat_user = db.query(WechatUser).filter(WechatUser.openid == openid).one_or_none()
-        if wechat_user:
-            wechat_user_id = wechat_user.id
+    if not db:
+        raise HTTPException(status_code=500, detail="数据库不可用")
+    wechat_user_id = current_user.id
     """
     获取每日训练分析和 AI 教练建议。
     

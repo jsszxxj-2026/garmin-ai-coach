@@ -57,10 +57,12 @@ export type WechatLoginRequest = {
 export type WechatLoginResponse = {
   openid: string
   unionid?: string
+  access_token: string
+  token_type: string
+  expires_in: number
 }
 
 export type WechatBindGarminRequest = {
-  openid: string
   garmin_email: string
   garmin_password: string
   is_cn?: boolean
@@ -68,14 +70,12 @@ export type WechatBindGarminRequest = {
 
 export type WechatBindGarminResponse = {
   bound: boolean
-}
-
-export type WechatUnbindGarminRequest = {
-  openid: string
+  backfill_started?: boolean
+  backfill_days?: number
 }
 
 export type WechatUnbindGarminResponse = {
-  unbound: boolean
+  bound: boolean
 }
 
 export type WechatProfileResponse = {
@@ -86,7 +86,6 @@ export type WechatProfileResponse = {
 }
 
 export type WechatChatRequest = {
-  openid: string
   message: string
 }
 

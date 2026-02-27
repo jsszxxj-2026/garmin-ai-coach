@@ -21,7 +21,6 @@ function Analysis() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [analysis, setAnalysis] = useState<DailyAnalysisResponse | null>(null)
-  const [openid] = useState('local-openid')
 
   const summaryItems = useMemo(() => {
     const summary = analysis?.summary
@@ -48,8 +47,8 @@ function Analysis() {
     try {
       const targetDate = getTargetDate()
       const response = targetDate
-        ? await getDailyAnalysisByDate(openid, targetDate)
-        : await getDailyAnalysis(openid)
+        ? await getDailyAnalysisByDate(targetDate)
+        : await getDailyAnalysis()
       setAnalysis(response)
     } catch (err) {
       setError('获取数据失败')

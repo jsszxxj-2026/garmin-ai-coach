@@ -15,7 +15,6 @@ function Home() {
   const [error, setError] = useState<string | null>(null)
   const [homeSummary, setHomeSummary] = useState<HomeSummaryResponse | null>(null)
   const [profile, setProfile] = useState<WechatProfileResponse | null>(null)
-  const [openid] = useState('local-openid')
   const [garminEmail, setGarminEmail] = useState('')
   const [garminPassword, setGarminPassword] = useState('')
   const [isCn, setIsCn] = useState(false)
@@ -28,8 +27,8 @@ function Home() {
     setLoading(true)
     setError(null)
     const [profileResult, summaryResult] = await Promise.allSettled([
-      getProfile(openid),
-      getHomeSummary(openid),
+      getProfile(),
+      getHomeSummary(),
     ])
 
     if (profileResult.status === 'fulfilled') {
@@ -58,7 +57,6 @@ function Home() {
   const handleBind = async () => {
     try {
       await bindGarmin({
-        openid,
         garmin_email: garminEmail,
         garmin_password: garminPassword,
         is_cn: isCn,
@@ -72,7 +70,7 @@ function Home() {
 
   const handleUnbind = async () => {
     try {
-      await unbindGarmin({ openid })
+      await unbindGarmin()
       Taro.showToast({ title: '已解绑', icon: 'success' })
       fetchData()
     } catch (err) {
@@ -97,7 +95,7 @@ function Home() {
     setShowPeriodModal(true)
     setPeriodLoading(true)
     try {
-      const data = await getPeriodAnalysis(openid, period)
+      const data = await getPeriodAnalysis(period)
       setPeriodAnalysis(data)
     } catch (err) {
       Taro.showToast({ title: '获取分析失败', icon: 'none' })

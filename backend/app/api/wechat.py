@@ -13,10 +13,13 @@ from backend.app.db.crud import (
     get_or_create_wechat_user,
     upsert_garmin_credential,
 )
+from backend.app.db.models import WechatUser
 from backend.app.db.session import get_db, get_sessionmaker
+from backend.app.deps.auth import get_current_wechat_user
 from backend.app.services.chat_service import ChatService
 from backend.app.services.garmin_client import GarminClient
 from backend.app.services.report_service import ReportService
+from backend.app.utils.auth import create_wechat_access_token
 from backend.app.utils.crypto import encrypt_text
 from src.core.config import settings
 
@@ -33,10 +36,12 @@ class WechatLoginRequest(BaseModel):
 class WechatLoginResponse(BaseModel):
     openid: str
     unionid: Optional[str] = None
+    access_token: str
+    token_type: str = "Bearer"
+    expires_in: int
 
 
 class GarminBindRequest(BaseModel):
-    openid: str
     garmin_email: str
     garmin_password: str
     is_cn: bool = False
@@ -56,16 +61,11 @@ class GarminProfileResponse(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    openid: str
     message: str
 
 
 class ChatResponse(BaseModel):
     reply: str
-
-
-class GarminUnbindRequest(BaseModel):
-    openid: str
 
 
 def _run_initial_backfill(wechat_user_id: int, days: int) -> None:
@@ -117,20 +117,27 @@ def wechat_login(payload: WechatLoginRequest, db: Session = Depends(get_db)) -> 
 
     get_or_create_wechat_user(db, openid=openid, unionid=unionid)
     db.commit()
-    return WechatLoginResponse(openid=openid, unionid=unionid)
+    expires_in = max(int(settings.WECHAT_ACCESS_TOKEN_EXPIRES_SECONDS), 3600)
+    access_token = create_wechat_access_token(openid=openid, expires_in_seconds=expires_in)
+    return WechatLoginResponse(
+        openid=openid,
+        unionid=unionid,
+        access_token=access_token,
+        expires_in=expires_in,
+    )
 
 
 @router.post("/bind-garmin", response_model=GarminBindResponse)
 def bind_garmin(
     payload: GarminBindRequest,
     background_tasks: BackgroundTasks,
+    current_user: WechatUser = Depends(get_current_wechat_user),
     db: Session = Depends(get_db),
 ) -> GarminBindResponse:
     if not payload.garmin_email or not payload.garmin_password:
         raise HTTPException(status_code=400, detail="Garmin 账号或密码为空")
 
-    wechat_user = get_or_create_wechat_user(db, openid=payload.openid)
-    existing_credential = get_garmin_credential(db, wechat_user_id=wechat_user.id)
+    existing_credential = get_garmin_credential(db, wechat_user_id=current_user.id)
 
     try:
         GarminClient(email=payload.garmin_email, password=payload.garmin_password, is_cn=payload.is_cn)
@@ -140,7 +147,7 @@ def bind_garmin(
     encrypted_password = encrypt_text(payload.garmin_password)
     upsert_garmin_credential(
         db,
-        wechat_user_id=wechat_user.id,
+        wechat_user_id=current_user.id,
         garmin_email=payload.garmin_email,
         garmin_password=encrypted_password,
         is_cn=payload.is_cn,
@@ -150,7 +157,7 @@ def bind_garmin(
     backfill_days = max(int(settings.INITIAL_BIND_BACKFILL_DAYS), 0)
     should_backfill = existing_credential is None and backfill_days > 0
     if should_backfill:
-        background_tasks.add_task(_run_initial_backfill, wechat_user.id, backfill_days)
+        background_tasks.add_task(_run_initial_backfill, current_user.id, backfill_days)
 
     return GarminBindResponse(
         bound=True,
@@ -160,9 +167,11 @@ def bind_garmin(
 
 
 @router.post("/unbind-garmin")
-def unbind_garmin(payload: GarminUnbindRequest, db: Session = Depends(get_db)) -> dict:
-    wechat_user = get_or_create_wechat_user(db, openid=payload.openid)
-    credential = get_garmin_credential(db, wechat_user_id=wechat_user.id)
+def unbind_garmin(
+    current_user: WechatUser = Depends(get_current_wechat_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    credential = get_garmin_credential(db, wechat_user_id=current_user.id)
     if credential is None:
         return {"bound": False}
     db.delete(credential)
@@ -171,13 +180,15 @@ def unbind_garmin(payload: GarminUnbindRequest, db: Session = Depends(get_db)) -
 
 
 @router.get("/profile", response_model=GarminProfileResponse)
-def get_profile(openid: str, db: Session = Depends(get_db)) -> GarminProfileResponse:
-    wechat_user = get_or_create_wechat_user(db, openid=openid)
-    credential = get_garmin_credential(db, wechat_user_id=wechat_user.id)
+def get_profile(
+    current_user: WechatUser = Depends(get_current_wechat_user),
+    db: Session = Depends(get_db),
+) -> GarminProfileResponse:
+    credential = get_garmin_credential(db, wechat_user_id=current_user.id)
     if credential is None:
-        return GarminProfileResponse(openid=openid, has_binding=False)
+        return GarminProfileResponse(openid=current_user.openid, has_binding=False)
     return GarminProfileResponse(
-        openid=openid,
+        openid=current_user.openid,
         has_binding=True,
         garmin_email=credential.garmin_email,
         is_cn=bool(credential.is_cn),
@@ -185,8 +196,11 @@ def get_profile(openid: str, db: Session = Depends(get_db)) -> GarminProfileResp
 
 
 @router.post("/chat", response_model=ChatResponse)
-def chat(payload: ChatRequest, db: Session = Depends(get_db)) -> ChatResponse:
-    _ = get_or_create_wechat_user(db, openid=payload.openid)
+def chat(
+    payload: ChatRequest,
+    _: WechatUser = Depends(get_current_wechat_user),
+    db: Session = Depends(get_db),
+) -> ChatResponse:
     service = ChatService()
     reply = service.reply(db=db, message=payload.message)
     return ChatResponse(reply=reply)

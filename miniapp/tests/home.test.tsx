@@ -296,7 +296,6 @@ describe('home page', () => {
     })
 
     expect(bindGarminMock).toHaveBeenCalledWith({
-      openid: 'local-openid',
       garmin_email: 'user@example.com',
       garmin_password: 'secret',
       is_cn: true,
@@ -324,7 +323,7 @@ describe('home page', () => {
         openid: 'openid-1',
         has_binding: false,
       })
-    unbindGarminMock.mockResolvedValue({ unbound: true })
+    unbindGarminMock.mockResolvedValue({ bound: false })
 
     const renderer = create(<Home />)
     await act(async () => {
@@ -343,7 +342,7 @@ describe('home page', () => {
       await flushPromises()
     })
 
-    expect(unbindGarminMock).toHaveBeenCalledWith({ openid: 'local-openid' })
+    expect(unbindGarminMock).toHaveBeenCalledWith()
     const emailInput = renderer.root.findByProps({
       'data-testid': 'garmin-email-input',
     })

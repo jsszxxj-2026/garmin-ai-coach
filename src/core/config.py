@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     WECHAT_SUBSCRIBE_TEMPLATE_ID: Optional[str] = None
     WECHAT_SUBSCRIBE_PAGE: str = "pages/index/index"
     WECHAT_TOKEN_CACHE_SECONDS: int = 7000
+    WECHAT_AUTH_SECRET: Optional[str] = None
+    WECHAT_ACCESS_TOKEN_EXPIRES_SECONDS: int = 86400 * 30
 
     # Garmin credential encryption
     GARMIN_CRED_ENCRYPTION_KEY: Optional[str] = None
