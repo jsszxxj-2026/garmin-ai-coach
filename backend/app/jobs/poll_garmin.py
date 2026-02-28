@@ -39,12 +39,15 @@ def detect_new_data(sync_state: Dict[str, Any], latest: Dict[str, Any]) -> bool:
 
 
 def build_template_data(report_date: str, summary: str) -> Dict[str, Dict[str, str]]:
+    # 模板字段：运动记录、时间、备注
+    # thing01: 运动记录 (20字内)
+    # time01: 时间
+    # remark01: 备注
     return {
-        "thing1": {"value": "AI 跑步日报"},
-        "date2": {"value": report_date},
-        "thing3": {"value": summary},
+        "thing01": {"value": "跑步数据同步完成"},
+        "time01": {"value": report_date},
+        "remark01": {"value": summary[:20] if summary else "点击查看详细报告"},
     }
-
 
 def _build_latest_snapshot() -> Dict[str, Any]:
     now_date = datetime.now().date().isoformat()
