@@ -171,6 +171,78 @@ class GeminiService:
                 return None
         return None
 
+    def chat(self, full_prompt: str) -> str:
+        """
+        纯对话调用，直接传入完整提示词，不拼接报告系统指令。
+
+        Args:
+            full_prompt: 已组装完成的完整提示词（包含系统指令 + 上下文 + 用户消息）
+
+        Returns:
+            AI 回复文本
+        """
+        if not full_prompt or not full_prompt.strip():
+            return "我没有收到你的消息，再说一遍？"
+
+        logger.info("[Gemini] 开始聊天请求...")
+
+        max_retries = 2
+        last_error = None
+
+        for attempt in range(max_retries):
+            try:
+                model = self._get_model()
+                response = model.generate_content(
+                    full_prompt,
+                    request_options={'timeout': 30}
+                )
+
+                result_text = None
+                try:
+                    if response and hasattr(response, "text"):
+                        result_text = response.text.strip()
+                except Exception as e:
+                    logger.warning(f"[Gemini] 无法使用 response.text: {e}")
+
+                if not result_text and response and hasattr(response, "candidates"):
+                    try:
+                        if response.candidates and len(response.candidates) > 0:
+                            candidate = response.candidates[0]
+                            if hasattr(candidate, "content") and candidate.content:
+                                if hasattr(candidate.content, "parts") and candidate.content.parts:
+                                    parts_text = []
+                                    for part in candidate.content.parts:
+                                        if hasattr(part, "text") and part.text:
+                                            parts_text.append(part.text)
+                                    if parts_text:
+                                        result_text = "\n".join(parts_text).strip()
+                    except Exception as e:
+                        logger.warning(f"[Gemini] 无法从 candidates 提取文本: {e}")
+
+                if result_text:
+                    # 清理可能的代码块标记
+                    if result_text.startswith("```"):
+                        lines = result_text.split("\n")
+                        if lines[0].startswith("```"):
+                            lines = lines[1:]
+                        if lines and lines[-1].strip() == "```":
+                            lines = lines[:-1]
+                        result_text = "\n".join(lines).strip()
+                    logger.info("[Gemini] 聊天响应生成完毕")
+                    return result_text
+                else:
+                    raise ValueError("响应中没有有效的文本内容")
+
+            except Exception as e:
+                last_error = e
+                logger.warning(f"[Gemini] 聊天请求失败 (尝试 {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(1)
+                    continue
+
+        logger.error(f"[Gemini] 聊天所有重试均失败: {last_error}")
+        return "对话暂不可用，请稍后重试。"
+
     def analyze_training(self, daily_report_md: str) -> str:
         """
         分析训练数据，返回 AI 教练建议。
