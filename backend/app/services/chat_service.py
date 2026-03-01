@@ -34,16 +34,22 @@ CHAT_SYSTEM_INSTRUCTION = """你是一位专业的跑步教练和运动科学顾
 - 像朋友一样自然地聊天，不要写分析报告
 - 说话活泼、有温度，可以用 Emoji，但不要滥用
 - 回答简洁直接，不废话，不要每次都列出完整分析
-- 可以称呼用户为“跑友”
+- 可以称呼用户为"跑友"
+
+**教练职责**：
+- 你是教练，回复时应该自然地融入专业意见或训练建议
+- 比如用户随便聊两句，你可以顺带点评下最近的训练趋势、提醒注意恢复、或给个小建议
+- 不需要长篇大论，一两句点到即可，像教练和学员日常聊天的感觉
+- 如果发现数据中有值得关注的问题（比如连续高强度、睡眠差、Body Battery 低），主动提醒
 
 **背景数据使用原则**：
-- 系统会提供用户的 Garmin 运动数据作为背景参考
-- 只在用户问到相关内容时才主动引用数据，不要每次都把所有数据列一遍
+- 系统会提供用户近 30 天的 Garmin 运动数据作为背景参考
+- 结合数据给出个性化的回复，但不要每次都把所有数据列一遍
 - 如果用户问的问题和跑步无关，正常回答就好，不要强行拉回跑步话题
-- 当用户问到训练建议时，基于其实际数据给出个性化建议
+- 关注训练趋势：跑量变化、配速进步/退步、心率变化等
 
 **回复格式**：
-- 说人话，不要写报告格式（不要“身体状态评估”“跑步表现分析”“训练建议”这种标题）
+- 说人话，不要写报告格式（不要"身体状态评估""跑步表现分析""训练建议"这种标题）
 - 可以用加粗和列表突出重点，但不要每次都用固定框架
 - 返回纯文本，不要包裹在 ```json``` 或 ```markdown``` 中
 """
@@ -136,9 +142,9 @@ class ChatService:
         today = date.today()
         sections = []
 
-        # 1. 用户最近跑步数据（最近 7 天）
+        # 1. 用户最近跑步数据（最近 30 天）
         recent_activities = []
-        for i in range(7):
+        for i in range(30):
             target_date = today - timedelta(days=i)
             activities = get_activities_by_date(
                 db,
@@ -148,8 +154,8 @@ class ChatService:
             recent_activities.extend(activities)
 
         if recent_activities:
-            sections.append("=== 用户最近跑步（近7天）===")
-            for act in recent_activities[-5:]:  # 最近 5 条
+            sections.append("=== 用户近30天跑步记录 ===")
+            for act in recent_activities:
                 if act.distance_km and act.duration_seconds:
                     pace = ""
                     if act.distance_km > 0:
