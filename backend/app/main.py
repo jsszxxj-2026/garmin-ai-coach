@@ -462,6 +462,80 @@ async def get_period_analysis(
 
     avg_sleep_hours = round(total_sleep_hours / sleep_days, 1) if sleep_days > 0 else None
 
+    # ====== 获取历史趋势数据 ======
+    # 查询上一周期（用于对比）
+    days_in_period = (end_date - start_date).days + 1
+    prev_start_date = start_date - timedelta(days=days_in_period)
+    prev_end_date = start_date - timedelta(days=1)
+    
+    prev_runs = db.query(Activity).filter(
+        Activity.user_id == user.id,
+        Activity.activity_date >= prev_start_date,
+        Activity.activity_date <= prev_end_date,
+        Activity.type.ilike("%run%"),
+    ).all()
+    
+    prev_run_count = len(prev_runs)
+    prev_total_distance = sum((r.distance_km or 0) for r in prev_runs)
+    
+    # 计算趋势
+    distance_trend = "增长" if total_distance > prev_total_distance else ("下降" if total_distance < prev_total_distance else "持平")
+    frequency_trend = "增加" if run_count > prev_run_count else ("减少" if run_count < prev_run_count else "持平")
+
+    # 查询最近 30 天的活动（用于分析训练频率）
+    recent_start_date = today - timedelta(days=30)
+    recent_runs = db.query(Activity).filter(
+        Activity.user_id == user.id,
+        Activity.activity_date >= recent_start_date,
+        Activity.activity_date <= today,
+        Activity.type.ilike("%run%"),
+    ).all()
+    
+    recent_run_count = len(recent_runs)
+    recent_total_distance = sum((r.distance_km or 0) for r in recent_runs)
+
+    # ====== AI 分析（含训练建议）======
+    ai_analysis = None
+    # 周至少 1 次跑步 + 1 天睡眠，月至少 3 次跑步 + 3 天睡眠
+    min_run = 1 if period == "week" else 3
+    min_sleep = 1 if period == "week" else 3
+
+    if run_count >= min_run and sleep_days >= min_sleep:
+        try:
+            prompt = f"""你是专业跑步教练，请分析以下数据并给出针对性的训练建议。
+
+=== 当前周期数据 ===
+周期：{period}
+日期：{start_date} 至 {end_date}
+跑步次数：{run_count} 次
+总跑量：{total_distance:.1f} km
+平均速度：{avg_speed or '-'} km/h
+睡眠天数：{sleep_days} 天
+平均睡眠：{avg_sleep_hours or '-'} 小时
+
+=== 历史趋势 ===
+上周期跑量：{prev_total_distance:.1f} km（{prev_run_count} 次）
+当前周期跑量：{total_distance:.1f} km
+跑量趋势：{distance_trend}
+跑步频次趋势：{frequency_trend}
+近 30 天跑量：{recent_total_distance:.1f} km（{recent_run_count} 次）
+
+=== 输出要求 ===
+1. 首先简要总结当前周期表现
+2. 分析训练趋势（是否在按计划提升？）
+3. 根据当前状态和历史趋势，**为下一周期（未来 7 天）制定具体的训练课表**
+4. 课表必须包含：日期、训练类型、时长/距离、目标
+
+注意：
+- 如果用户近 30 天跑量 > 100km 且趋势增长，建议维持或适当减少，避免过度训练
+- 如果用户近 30 天跑量 < 50km 且趋势下降，建议增加跑量基础
+- 如果明天或后天有大课（间歇、节奏跑），今天必须安排恢复
+- 输出格式：先用 Markdown 总结分析，然后给出未来 7 天课表
+"""
+            ai_analysis = gemini.analyze_training(prompt)
+        except Exception as e:
+            logger.warning(f"[PeriodAnalysis] AI analysis failed: {e}")
+
     # AI 分析
     ai_analysis = None
     # 周至少 1 次跑步 + 1 天睡眠，月至少 3 次跑步 + 3 天睡眠

@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, joinedload
 from backend.app.db.models import (
     Activity,
     ActivityLap,
+    ChatMessage,
     DailyAnalysis,
     GarminDailySummary,
     GarminCredential,
@@ -22,6 +23,7 @@ from backend.app.db.models import (
     SyncState,
     TrainingPlan,
     User,
+    UserProfile,
     WechatUser,
 )
 
@@ -542,5 +544,105 @@ def save_analysis(
         return existing
 
     row = DailyAnalysis(user_id=user_id, analysis_date=analysis_date, **fields)
+    db.add(row)
+    return row
+
+def get_user_profile(db: Session, *, user_id: int, profile_date: date) -> Optional[UserProfile]:
+    """获取指定日期的用户个人档案"""
+    return (
+        db.query(UserProfile)
+        .filter(UserProfile.user_id == user_id)
+        .filter(UserProfile.profile_date == profile_date)
+        .one_or_none()
+    )
+
+
+def upsert_user_profile(
+    db: Session,
+    *,
+    user_id: int,
+    profile_date: date,
+    weight_kg: Optional[float] = None,
+    bmi: Optional[float] = None,
+    body_fat_percent: Optional[float] = None,
+    vo2_max: Optional[float] = None,
+    max_heart_rate: Optional[int] = None,
+    resting_heart_rate: Optional[int] = None,
+    training_status: Optional[str] = None,
+    training_effect: Optional[float] = None,
+    activity_effect: Optional[float] = None,
+    training_readiness: Optional[int] = None,
+    heart_rate_zones_json: Optional[dict[str, Any]] = None,
+    personal_records_json: Optional[dict[str, Any]] = None,
+    race_predictions_json: Optional[dict[str, Any]] = None,
+    raw_json: Optional[dict[str, Any]] = None,
+) -> UserProfile:
+    """创建或更新用户个人档案"""
+    existing = (
+        db.query(UserProfile)
+        .filter(UserProfile.user_id == user_id)
+        .filter(UserProfile.profile_date == profile_date)
+        .one_or_none()
+    )
+
+    fields = {
+        "weight_kg": weight_kg,
+        "bmi": bmi,
+        "body_fat_percent": body_fat_percent,
+        "vo2_max": vo2_max,
+        "max_heart_rate": max_heart_rate,
+        "resting_heart_rate": resting_heart_rate,
+        "training_status": training_status,
+        "training_effect": training_effect,
+        "activity_effect": activity_effect,
+        "training_readiness": training_readiness,
+        "heart_rate_zones_json": heart_rate_zones_json,
+        "personal_records_json": personal_records_json,
+        "race_predictions_json": race_predictions_json,
+        "raw_json": raw_json,
+    }
+
+    if existing:
+        for k, v in fields.items():
+            if v is not None:
+                setattr(existing, k, v)
+        return existing
+
+    row = UserProfile(user_id=user_id, profile_date=profile_date, **fields)
+    db.add(row)
+    return row
+
+
+def get_chat_messages(
+    db: Session,
+    *,
+    wechat_user_id: int,
+    limit: int = 20,
+) -> list[ChatMessage]:
+    """获取用户的聊天历史"""
+    return (
+        db.query(ChatMessage)
+        .filter(ChatMessage.wechat_user_id == wechat_user_id)
+        .order_by(ChatMessage.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+
+def add_chat_message(
+    db: Session,
+    *,
+    wechat_user_id: int,
+    role: str,
+    content: str,
+    context_json: Optional[dict[str, Any]] = None,
+) -> ChatMessage:
+    """添加聊天消息"""
+    row = ChatMessage(
+        wechat_user_id=wechat_user_id,
+        role=role,
+        content=content,
+        context_json=context_json,
+    )
     db.add(row)
     return row

@@ -15,10 +15,12 @@ from backend.app.db.crud import (
     get_garmin_credential,
     get_or_create_user,
     get_training_plans_in_range,
+    get_user_profile,
     save_analysis,
     upsert_activities,
     upsert_daily_summary,
     upsert_training_plans,
+    upsert_user_profile,
 )
 from backend.app.services.data_processor import DataProcessor
 from backend.app.services.garmin_client import GarminClient

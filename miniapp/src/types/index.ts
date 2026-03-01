@@ -92,3 +92,14 @@ export type WechatChatRequest = {
 export type WechatChatResponse = {
   reply: string
 }
+
+export type ChatMessage = {
+  id: number
+  role: 'user' | 'assistant'
+  content: string
+  created_at: string | null
+}
+
+export type ChatHistoryResponse = {
+  messages: ChatMessage[]
+}

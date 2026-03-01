@@ -45,6 +45,10 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    profiles: Mapped[list["UserProfile"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
 
 class WechatUser(Base):
@@ -74,6 +78,10 @@ class WechatUser(Base):
         back_populates="wechat_user",
         cascade="all, delete-orphan",
         uselist=False,
+    )
+    chat_messages: Mapped[list["ChatMessage"]] = relationship(
+        back_populates="wechat_user",
+        cascade="all, delete-orphan",
     )
 
 
@@ -352,3 +360,76 @@ class DailyAnalysis(Base):
     )
 
     user: Mapped[User] = relationship(back_populates="analyses")
+
+
+class UserProfile(Base):
+    """用户个人基础数据档案"""
+    __tablename__ = "user_profiles"
+    __table_args__ = (
+        UniqueConstraint("user_id", "profile_date", name="uq_user_profile_date"),
+        {"mysql_charset": "utf8mb4"},
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    profile_date: Mapped[date] = mapped_column(Date, nullable=False)
+
+    # 身体成分
+    weight_kg: Mapped[Optional[float]] = mapped_column(Float)
+    bmi: Mapped[Optional[float]] = mapped_column(Float)
+    body_fat_percent: Mapped[Optional[float]] = mapped_column(Float)
+
+    # 运动能力
+    vo2_max: Mapped[Optional[float]] = mapped_column(Float)
+    max_heart_rate: Mapped[Optional[int]] = mapped_column(Integer)
+    resting_heart_rate: Mapped[Optional[int]] = mapped_column(Integer)
+
+    # 训练状态
+    training_status: Mapped[Optional[str]] = mapped_column(String(64))
+    training_effect: Mapped[Optional[float]] = mapped_column(Float)
+    activity_effect: Mapped[Optional[float]] = mapped_column(Float)
+
+    # 训练准备度
+    training_readiness: Mapped[Optional[int]] = mapped_column(Integer)
+
+    # 心率区间 JSON
+    heart_rate_zones_json: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON)
+
+    # 个人最佳记录 JSON
+    personal_records_json: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON)
+
+    # 比赛预测 JSON
+    race_predictions_json: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON)
+
+    # 原始数据
+    raw_json: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    user: Mapped[User] = relationship(back_populates="profiles")
+
+
+class ChatMessage(Base):
+    """聊天消息记录"""
+    __tablename__ = "chat_messages"
+    __table_args__ = {"mysql_charset": "utf8mb4"}
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    wechat_user_id: Mapped[int] = mapped_column(ForeignKey("wechat_users.id", ondelete="CASCADE"), nullable=False)
+
+    # 消息角色和内容
+    role: Mapped[str] = mapped_column(String(16), nullable=False)  # "user" or "assistant"
+    content: Mapped[str] = mapped_column(LONGTEXT, nullable=False)
+
+    # 上下文信息
+    context_json: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+    wechat_user: Mapped[WechatUser] = relationship(back_populates="chat_messages")

@@ -109,7 +109,7 @@ function Home() {
   }
 
   const handleChat = () => {
-    Taro.showToast({ title: '聊天功能建设中', icon: 'none' })
+    Taro.navigateTo({ url: '/pages/chat/index' })
   }
 
   if (loading) {

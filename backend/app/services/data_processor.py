@@ -597,6 +597,76 @@ class DataProcessor:
 
         return "\n".join(sections).strip()
 
+    def format_user_profile_summary(self, profile_data: Dict[str, Any]) -> Optional[str]:
+        """
+        将用户个人档案数据格式化为 Markdown 文本。
+
+        Args:
+            profile_data: 由 GarminClient.get_user_profile_data() 返回的用户档案数据
+
+        Returns:
+            用户档案的 Markdown 格式文本，如果无可用数据则返回 None
+        """
+        if not profile_data:
+            return None
+
+        lines: List[str] = []
+        has_data = False
+
+        # 身体成分
+        weight = profile_data.get("weight_kg")
+        bmi = profile_data.get("bmi")
+        body_fat = profile_data.get("body_fat_percent")
+        if weight or bmi or body_fat:
+            has_data = True
+            lines.append("### ⚖️ 身体成分")
+            if weight:
+                lines.append(f"- 体重: {weight} kg")
+            if bmi:
+                lines.append(f"- BMI: {bmi}")
+            if body_fat:
+                lines.append(f"- 体脂率: {body_fat}%")
+
+        # 运动能力
+        vo2_max = profile_data.get("vo2_max")
+        max_hr = profile_data.get("max_heart_rate")
+        resting_hr = profile_data.get("resting_heart_rate")
+        if vo2_max or max_hr or resting_hr:
+            has_data = True
+            lines.append("### 💪 运动能力")
+            if vo2_max:
+                lines.append(f"- VO2Max: {vo2_max}")
+            if max_hr:
+                lines.append(f"- 最大心率: {max_hr} bpm")
+            if resting_hr:
+                lines.append(f"- 静息心率: {resting_hr} bpm")
+
+        # 训练状态
+        training_status = profile_data.get("training_status")
+        training_effect = profile_data.get("training_effect")
+        activity_effect = profile_data.get("activity_effect")
+        if training_status or training_effect or activity_effect:
+            has_data = True
+            lines.append("### 📈 训练状态")
+            if training_status:
+                lines.append(f"- 状态: {training_status}")
+            if training_effect:
+                lines.append(f"- 训练效果: {training_effect}")
+            if activity_effect:
+                lines.append(f"- 活动效果: {activity_effect}")
+
+        # 训练准备度
+        readiness = profile_data.get("training_readiness")
+        if readiness is not None:
+            has_data = True
+            lines.append("### 🎯 训练准备度")
+            lines.append(f"- 准备度得分: {readiness}")
+
+        if not has_data:
+            return None
+
+        return "\n".join(lines)
+
     def extract_chart_data(self, activity_json: Dict[str, Any]) -> Dict[str, List]:
         """
         从活动 JSON 中提取图表数据。

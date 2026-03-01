@@ -1,5 +1,6 @@
 import { apiClient } from './client'
 import type {
+  ChatHistoryResponse,
   DailyAnalysisResponse,
   HomeSummaryResponse,
   PeriodAnalysisResponse,
@@ -41,4 +42,8 @@ export const getProfile = async () => {
 
 export const chat = async (payload: WechatChatRequest) => {
   return apiClient.post<WechatChatResponse>('/api/wechat/chat', payload)
+}
+
+export const getChatHistory = async (limit: number = 20) => {
+  return apiClient.get<ChatHistoryResponse>('/api/wechat/chat/history', { limit })
 }

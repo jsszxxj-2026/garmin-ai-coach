@@ -198,6 +198,40 @@ def get_profile(
 @router.post("/chat", response_model=ChatResponse)
 def chat(
     payload: ChatRequest,
+    current_user: WechatUser = Depends(get_current_wechat_user),
+    db: Session = Depends(get_db),
+) -> ChatResponse:
+    service = ChatService()
+    reply = service.reply(db=db, wechat_user_id=current_user.id, message=payload.message)
+    return ChatResponse(reply=reply)
+
+
+@router.get("/chat/history")
+def get_chat_history(
+    limit: int = 20,
+    current_user: WechatUser = Depends(get_current_wechat_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """获取聊天历史记录"""
+    from backend.app.db.crud import get_chat_messages
+    
+    messages = get_chat_messages(db, wechat_user_id=current_user.id, limit=limit)
+    # 反转顺序，最新的在前
+    messages = list(reversed(messages))
+    
+    return {
+        "messages": [
+            {
+                "id": msg.id,
+                "role": msg.role,
+                "content": msg.content,
+                "created_at": msg.created_at.isoformat() if msg.created_at else None,
+            }
+            for msg in messages
+        ]
+    }
+def chat(
+    payload: ChatRequest,
     _: WechatUser = Depends(get_current_wechat_user),
     db: Session = Depends(get_db),
 ) -> ChatResponse:

@@ -449,3 +449,106 @@ class GarminClient:
         ]
         
         return activity, health, plan
+
+    def get_user_profile_data(self, date_str: str) -> Dict[str, Any]:
+        """
+        获取用户个人基础数据，用于个性化 AI 分析。
+
+        合并以下数据源：
+        - get_body_composition: 体重、BMI、体脂率等
+        - get_max_metrics: VO2Max、最大心率等运动能力指标
+        - get_heart_rates: 心率区间数据
+        - get_training_status: 训练状态
+        - get_training_readiness: 训练准备度
+        - get_personal_record: 个人最佳记录
+        - get_race_predictions: 比赛预测
+
+        Args:
+            date_str: 日期字符串，格式 "YYYY-MM-DD"
+
+        Returns:
+            合并后的用户个人数据字典
+        """
+        result: Dict[str, Any] = {
+            "date": date_str,
+        }
+
+        # 1. 获取身体成分数据
+        try:
+            body_comp = self.client.get_body_composition(date_str)
+            if body_comp:
+                if "weight" in body_comp:
+                    result["weight_kg"] = body_comp.get("weight")
+                if "bmi" in body_comp:
+                    result["bmi"] = body_comp.get("bmi")
+                if "bodyFat" in body_comp:
+                    result["body_fat_percent"] = body_comp.get("bodyFat")
+                result["body_composition"] = body_comp
+        except Exception as e:
+            result["body_composition_error"] = str(e)
+
+        # 2. 获取最大运动指标
+        try:
+            max_metrics = self.client.get_max_metrics(date_str)
+            if max_metrics:
+                if "vo2Max" in max_metrics:
+                    result["vo2_max"] = max_metrics.get("vo2Max")
+                if "maxHeartRate" in max_metrics:
+                    result["max_heart_rate"] = max_metrics.get("maxHeartRate")
+                if "restingHeartRate" in max_metrics:
+                    result["resting_heart_rate"] = max_metrics.get("restingHeartRate")
+                result["max_metrics"] = max_metrics
+        except Exception as e:
+            result["max_metrics_error"] = str(e)
+
+        # 3. 获取心率区间数据
+        try:
+            heart_rates = self.client.get_heart_rates(date_str)
+            if heart_rates:
+                result["heart_rates"] = heart_rates
+        except Exception as e:
+            result["heart_rates_error"] = str(e)
+
+        # 4. 获取训练状态
+        try:
+            training_status = self.client.get_training_status(date_str)
+            if training_status:
+                if "trainingStatus" in training_status:
+                    result["training_status"] = training_status.get("trainingStatus")
+                if "trainingEffect" in training_status:
+                    result["training_effect"] = training_status.get("trainingEffect")
+                if "activityEffect" in training_status:
+                    result["activity_effect"] = training_status.get("activityEffect")
+                result["training_status_data"] = training_status
+        except Exception as e:
+            result["training_status_error"] = str(e)
+
+        # 5. 获取训练准备度
+        try:
+            readiness = self.client.get_training_readiness(date_str)
+            if readiness:
+                if "trainingReadiness" in readiness:
+                    result["training_readiness"] = readiness.get("trainingReadiness")
+                result["training_readiness_data"] = readiness
+        except Exception as e:
+            result["training_readiness_error"] = str(e)
+
+        # 6. 获取个人最佳记录
+        try:
+            prs = self.client.get_personal_record()
+            if prs:
+                result["personal_records"] = prs
+        except Exception as e:
+            result["personal_record_error"] = str(e)
+
+        # 7. 获取比赛预测
+        try:
+            predictions = self.client.get_race_predictions(date_str, date_str)
+            if predictions:
+                result["race_predictions"] = predictions
+        except Exception as e:
+            result["race_predictions_error"] = str(e)
+
+        return result
+        
+        return activity, health, plan
