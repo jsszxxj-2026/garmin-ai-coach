@@ -8,6 +8,11 @@
   color: var(--muted-text);
 }
 
+.error {
+  padding: 32px 24px;
+  text-align: center;
+}
+
 .error-text {
   display: block;
   font-size: 28px;
@@ -38,6 +43,12 @@
   font-weight: 500;
 }
 
+.stat-body {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
 .stat-value {
   font-size: 44px;
   font-weight: 700;
@@ -48,59 +59,6 @@
   font-size: 22px;
   color: var(--primary-color);
   font-weight: 500;
-}
-
-  font-size: 28px;
-  color: #5f6b7a;
-}
-
-.error {
-  padding: 32px 24px;
-  text-align: center;
-}
-
-.error-text {
-  display: block;
-  font-size: 28px;
-  color: #d14343;
-  margin-bottom: 16px;
-}
-
-.error-button {
-  background: #2f6fed;
-  color: #ffffff;
-  font-size: 26px;
-}
-
-.stat-card {
-  background: #ffffff;
-  border-radius: 16px;
-  padding: 24px;
-  box-shadow: 0 8px 24px rgba(31, 41, 55, 0.08);
-}
-
-.stat-title {
-  display: block;
-  font-size: 24px;
-  color: #5f6b7a;
-  margin-bottom: 12px;
-}
-
-.stat-body {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.stat-value {
-  font-size: 40px;
-  font-weight: 600;
-  color: #1f2937;
-}
-
-.stat-unit {
-  font-size: 22px;
-  color: #9aa4b2;
 }
 
 .markdown {
@@ -160,62 +118,9 @@
   margin: 16px 0;
 }
 
-.markdown-list-bullet {
-  font-size: 28px;
-  color: var(--primary-color);
-  font-weight: 700;
-}
-
-  font-size: 26px;
-  color: #1f2937;
-  line-height: 1.7;
-}
-
-.markdown-h1 {
-  font-size: 34px;
-  font-weight: 700;
-  color: #0f172a;
-  line-height: 1.4;
-}
-
-.markdown-h2 {
-  font-size: 30px;
-  font-weight: 600;
-  color: #0f172a;
-  line-height: 1.4;
-}
-
-.markdown-h3 {
-  font-size: 28px;
-  font-weight: 600;
-  color: #0f172a;
-  line-height: 1.4;
-}
-
-.markdown-bold {
-  font-weight: 600;
-  color: #0f172a;
-}
-
-.markdown-code {
-  font-family: 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
-  font-size: 22px;
-  padding: 2px 8px;
-  background: #e2e8f0;
-  border-radius: 8px;
-  color: #0f172a;
-}
-
-.markdown-quote {
-  padding: 14px 18px;
-  border-left: 6px solid #6366f1;
-  background: #eef2ff;
-  border-radius: 12px;
-}
-
 .markdown-quote-text {
-  font-size: 26px;
-  color: #1f2937;
+  font-size: 28px;
+  color: var(--text-color);
   line-height: 1.7;
 }
 
@@ -232,14 +137,14 @@
 }
 
 .markdown-list-bullet {
-  font-size: 26px;
-  color: #6366f1;
-  font-weight: 600;
+  font-size: 28px;
+  color: var(--primary-color);
+  font-weight: 700;
 }
 
 .markdown-list-text {
-  font-size: 26px;
-  color: #1f2937;
+  font-size: 28px;
+  color: var(--text-color);
   line-height: 1.7;
 }
 
@@ -274,6 +179,16 @@
   text-align: center;
   display: block;
   margin-bottom: 40px;
+}
+
+.modal-body {
+  margin-bottom: 32px;
+}
+
+.modal-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .modal-label {
@@ -313,68 +228,4 @@
   border-radius: 40px;
   padding: 24px;
   margin-top: 16px;
-}
-
-  background: #ffffff;
-  border-radius: 24px;
-  padding: 40px 32px;
-  max-width: 600px;
-  width: 90%;
-  max-height: 80vh;
-  overflow-y: auto;
-}
-
-.modal-title {
-  font-size: 36px;
-  font-weight: 700;
-  color: #1f2937;
-  text-align: center;
-  display: block;
-  margin-bottom: 32px;
-}
-
-.modal-body {
-  margin-bottom: 32px;
-}
-
-.modal-stats {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.modal-label {
-  font-size: 28px;
-  color: #5f6b7a;
-}
-
-.modal-ai {
-  margin-top: 32px;
-  padding: 24px;
-  background: #f3f4f6;
-  border-radius: 16px;
-}
-
-.modal-ai-title {
-  font-size: 28px;
-  font-weight: 600;
-  color: #2f6fed;
-  display: block;
-  margin-bottom: 12px;
-}
-
-.modal-ai-content {
-  font-size: 26px;
-  color: #1f2937;
-  line-height: 1.6;
-  display: block;
-}
-
-.modal-close {
-  width: 100%;
-  background: #2f6fed;
-  color: #ffffff;
-  font-size: 28px;
-  border-radius: 12px;
-  padding: 20px;
 }

@@ -27,7 +27,6 @@ function Chat() {
   }, [])
 
   useEffect(() => {
-    // 滚动到底部
     setTimeout(() => {
       scrollRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, 100)
@@ -63,7 +62,6 @@ function Chat() {
     const userMessage = inputValue.trim()
     setInputValue('')
 
-    // 添加用户消息
     const userMsg: Message = {
       id: `user-${Date.now()}`,
       role: 'user',
@@ -72,7 +70,6 @@ function Chat() {
     }
     setMessages(prev => [...prev, userMsg])
 
-    // 添加 loading 消息
     const loadingMsg: Message = {
       id: 'loading',
       role: 'assistant',
@@ -86,7 +83,6 @@ function Chat() {
     try {
       const response = await chat({ message: userMessage })
 
-      // 移除 loading 消息，添加 AI 回复
       setMessages(prev => {
         const filtered = prev.filter(msg => msg.id !== 'loading')
         const aiMsg: Message = {
@@ -98,7 +94,6 @@ function Chat() {
         return [...filtered, aiMsg]
       })
     } catch (err) {
-      // 移除 loading 消息，显示错误
       setMessages(prev => {
         const filtered = prev.filter(msg => msg.id !== 'loading')
         const errorMsg: Message = {
@@ -111,12 +106,6 @@ function Chat() {
       })
     } finally {
       setLoading(false)
-    }
-  }
-
-  const handleInputKeyPress = (e: { keyCode: number }) => {
-    if (e.keyCode === 13) {
-      handleSend()
     }
   }
 
@@ -142,7 +131,7 @@ function Chat() {
             {messages.length === 0 ? (
               <View className='chat-welcome'>
                 <Text className='chat-welcome-title'>🏃‍♂️ 冠军你好！</Text>
-n                <Text className='chat-welcome-text'>
+                <Text className='chat-welcome-text'>
                   我是你的 AI 跑步教练，有什么关于训练、睡眠、恢复的问题都可以问我！
                 </Text>
               </View>
