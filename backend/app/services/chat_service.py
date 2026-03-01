@@ -105,6 +105,9 @@ class ChatService:
         # 构建上下文
         context = self._build_context(db, user.id, credential, message)
 
+        # 打印完整提示词用于调试
+        logger.info(f"[Chat] Full prompt for user {wechat_user_id}:\n{context}")
+
         try:
             reply = self.gemini.analyze_training(context)
         except Exception as e:
@@ -213,7 +216,7 @@ class ChatService:
         # 组合完整提示词
         full_prompt = f"""{CHAT_SYSTEM_INSTRUCTION}
 
-{sections}
+{chr(10).join(sections)}
 
 请根据以上上下文回答用户问题。如果用户没有问具体问题，可以给出训练建议或分享有趣的洞察。
 """

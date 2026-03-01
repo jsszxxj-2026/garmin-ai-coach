@@ -19,17 +19,28 @@ function Chat() {
   const [inputValue, setInputValue] = useState('')
   const [loading, setLoading] = useState(false)
   const [profile, setProfile] = useState<WechatProfileResponse | null>(null)
-  const scrollRef = useRef<any>(null)
+  const [scrollToMsg, setScrollToMsg] = useState('')
+  const [pageHeight, setPageHeight] = useState(600)
 
   useEffect(() => {
+    // windowHeight 已经是去掉导航栏后的可用高度
+    const sysInfo = Taro.getSystemInfoSync()
+    setPageHeight(sysInfo.windowHeight)
+
     fetchProfile()
     fetchHistory()
   }, [])
 
   useEffect(() => {
-    setTimeout(() => {
-      scrollRef.current?.scrollIntoView({ behavior: 'smooth' })
-    }, 100)
+    // 每次 messages 变化，滚动到底部
+    if (messages.length > 0) {
+      const lastMsg = messages[messages.length - 1]
+      // 先清空再设值，确保相同 id 也能触发滚动
+      setScrollToMsg('')
+      setTimeout(() => {
+        setScrollToMsg(`msg-${lastMsg.id}`)
+      }, 150)
+    }
   }, [messages])
 
   const fetchProfile = async () => {
@@ -111,6 +122,10 @@ function Chat() {
 
   const isBound = profile?.has_binding
 
+  // 输入区域高度（padding + input + safe area ≈ 56px）
+  const inputAreaHeight = 56
+  const scrollHeight = pageHeight - inputAreaHeight
+
   return (
     <View className='chat-page'>
       {!isBound ? (
@@ -125,8 +140,9 @@ function Chat() {
           <ScrollView
             className='chat-messages'
             scrollY
-            scrollTop={0}
-            ref={scrollRef}
+            scrollIntoView={scrollToMsg}
+            scrollWithAnimation
+            style={{ height: `${scrollHeight}px` }}
           >
             {messages.length === 0 ? (
               <View className='chat-welcome'>
@@ -139,6 +155,7 @@ function Chat() {
               messages.map(msg => (
                 <View
                   key={msg.id}
+                  id={`msg-${msg.id}`}
                   className={`chat-message ${msg.role === 'user' ? 'chat-message-user' : 'chat-message-assistant'}`}
                 >
                   <View className='chat-message-content'>
@@ -165,7 +182,7 @@ function Chat() {
               onClick={handleSend}
               disabled={!inputValue.trim() || loading}
             >
-              {loading ? '...' : '发送'}
+              {loading ? '...' : '↑'}
             </Button>
           </View>
         </>
