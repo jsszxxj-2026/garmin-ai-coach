@@ -3,6 +3,7 @@ import { View, Text, Input, Button, ScrollView } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 
 import { chat, getChatHistory, getProfile } from '../../api/coach'
+import MarkdownView from '../../components/MarkdownView'
 import type { ChatMessage, WechatProfileResponse } from '../../types'
 
 import './index.scss'
@@ -159,7 +160,13 @@ function Chat() {
                   className={`chat-message ${msg.role === 'user' ? 'chat-message-user' : 'chat-message-assistant'}`}
                 >
                   <View className='chat-message-content'>
-                    <Text className='chat-message-text'>{msg.content}</Text>
+                    {msg.role === 'assistant' ? (
+                      <View className='chat-markdown'>
+                        <MarkdownView content={msg.content} />
+                      </View>
+                    ) : (
+                      <Text className='chat-message-text'>{msg.content}</Text>
+                    )}
                   </View>
                 </View>
               ))
