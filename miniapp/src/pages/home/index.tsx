@@ -122,6 +122,7 @@ function Home() {
 
   const isBound = profile?.has_binding
   const latestRun = homeSummary?.latest_run
+  const readiness = homeSummary?.readiness
   const weekStats = homeSummary?.week_stats
   const monthStats = homeSummary?.month_stats
   const aiBrief = homeSummary?.ai_brief
@@ -148,7 +149,7 @@ function Home() {
       ) : (
         <View className='bind-card'>
           <Text className='bind-title'>绑定 Garmin 账号</Text>
-          <Text className='bind-desc'>绑定后可同步睡眠、体能电量与压力数据</Text>
+          <Text className='bind-desc'>绑定后可同步睡眠，体能电量与压力数据</Text>
           <View className='bind-form'>
             <Input
               className='bind-input'
@@ -209,6 +210,28 @@ function Home() {
                 <Text className='run-card-value'>{latestRun.duration_min || '-'}</Text>
                 <Text className='run-card-unit'>分钟</Text>
               </View>
+            </View>
+          </View>
+        </View>
+      ) : null}
+
+      {/* 准备度评分卡片 */}
+      {readiness ? (
+        <View className='summary'>
+          <Text className='section-title'>今日准备度</Text>
+          <View className='readiness-card'>
+            <View className='readiness-header'>
+              <Text className='readiness-score'>{readiness.score}</Text>
+              <Text className='readiness-max'>/10</Text>
+            </View>
+            <Text className='readiness-verdict'>{readiness.verdict}</Text>
+            <View className='readiness-factors'>
+              {readiness.factors.map((factor, idx) => (
+                <View key={idx} className={`readiness-factor readiness-factor-${factor.status}`}>
+                  <Text className='readiness-factor-name'>{factor.name}</Text>
+                  <Text className='readiness-factor-value'>{factor.value}</Text>
+                </View>
+              ))}
             </View>
           </View>
         </View>

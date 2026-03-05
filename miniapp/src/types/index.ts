@@ -15,6 +15,18 @@ export type DailyAnalysisResponse = {
   }
 }
 
+// 准备度评分
+export type ReadinessScore = {
+  score: number
+  verdict: string
+  factors: Array<{
+    name: string
+    value: string | number
+    status: 'green' | 'yellow' | 'red'
+    change: string
+  }>
+}
+
 export type HomeSummaryResponse = {
   latest_run: {
     start_time: string
@@ -23,6 +35,8 @@ export type HomeSummaryResponse = {
     avg_pace?: string | null
     duration_min?: number | null
   } | null
+  // 准备度评分
+  readiness?: ReadinessScore | null
   week_stats: {
     distance_km: number
     avg_speed_kmh?: number | null
