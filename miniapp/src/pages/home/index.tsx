@@ -78,13 +78,6 @@ function Home() {
     }
   }
 
-  const handleAnalysis = () => {
-    if (!isBound) {
-      Taro.showToast({ title: '请先绑定 Garmin 账号', icon: 'none' })
-      return
-    }
-    Taro.navigateTo({ url: '/pages/analysis/index' })
-  }
 
   const handleLatestRunClick = () => {
     if (homeSummary?.latest_run?.start_time) {
@@ -108,9 +101,6 @@ function Home() {
     }
   }
 
-  const handleChat = () => {
-    Taro.navigateTo({ url: '/pages/chat/index' })
-  }
 
   if (loading) {
     return <Loading />
@@ -134,58 +124,6 @@ function Home() {
         <Text className='subtitle'>今日概览与智能建议</Text>
       </View>
 
-      {isBound ? (
-        <View className='bind-card'>
-          <Text className='bind-title'>Garmin 已绑定</Text>
-          <Text className='bind-desc'>如需更换账号，请先解绑再重新绑定</Text>
-          <Button
-            className='primary-button'
-            onClick={handleUnbind}
-            data-testid='unbind-rebind'
-          >
-            解绑/重新绑定
-          </Button>
-        </View>
-      ) : (
-        <View className='bind-card'>
-          <Text className='bind-title'>绑定 Garmin 账号</Text>
-          <Text className='bind-desc'>绑定后可同步睡眠，体能电量与压力数据</Text>
-          <View className='bind-form'>
-            <Input
-              className='bind-input'
-              type='text'
-              placeholder='Garmin 邮箱'
-              value={garminEmail}
-              onInput={(event) => setGarminEmail(event.detail.value)}
-              data-testid='garmin-email-input'
-            />
-            <Input
-              className='bind-input'
-              type='text'
-              password
-              placeholder='Garmin 密码'
-              value={garminPassword}
-              onInput={(event) => setGarminPassword(event.detail.value)}
-              data-testid='garmin-password-input'
-            />
-            <View className='bind-switch'>
-              <Text>中国区账号</Text>
-              <Switch
-                checked={isCn}
-                onChange={(event) => setIsCn(event.detail.value)}
-                data-testid='garmin-is-cn-switch'
-              />
-            </View>
-          </View>
-          <Button
-            className='primary-button'
-            onClick={handleBind}
-            data-testid='bind-submit'
-          >
-            立即绑定
-          </Button>
-        </View>
-      )}
 
       {latestRun ? (
         <View className='summary'>
@@ -291,14 +229,84 @@ function Home() {
         </View>
       ) : null}
 
-      <View className='actions'>
-        <Button className='ghost-button' onClick={handleAnalysis}>
-          查看详细分析
-        </Button>
-        <Button className='ghost-button' onClick={handleChat}>
-          进入聊天
-        </Button>
+      {/* 教练功能入口 */}
+      <View className='summary'>
+        <Text className='section-title'>教练功能</Text>
+        <View className='feature-grid'>
+          {[
+            { emoji: '🌅', title: '晨间报告', url: '/pages/morning-report/index' },
+            { emoji: '🌙', title: '晚间复盘', url: '/pages/evening-review/index' },
+            { emoji: '📊', title: '周度总结', url: '/pages/weekly-summary/index' },
+            { emoji: '💬', title: 'AI 对话', url: '/pages/chat/index' },
+            { emoji: '🩹', title: '伤病记录', url: '/pages/injury-log/index' },
+            { emoji: '🏃', title: '运动员档案', url: '/pages/profile/index' },
+          ].map((item) => (
+            <View
+              key={item.title}
+              className='feature-card'
+              onClick={() => Taro.navigateTo({ url: item.url })}
+            >
+              <Text className='feature-emoji'>{item.emoji}</Text>
+              <Text className='feature-title'>{item.title}</Text>
+            </View>
+          ))}
+        </View>
       </View>
+
+      {/* Garmin 绑定 */}
+      {isBound ? (
+        <View className='bind-card'>
+          <Text className='bind-title'>Garmin 已绑定</Text>
+          <Text className='bind-desc'>如需更换账号，请先解绑再重新绑定</Text>
+          <Button
+            className='primary-button'
+            onClick={handleUnbind}
+            data-testid='unbind-rebind'
+          >
+            解绑/重新绑定
+          </Button>
+        </View>
+      ) : (
+        <View className='bind-card'>
+          <Text className='bind-title'>绑定 Garmin 账号</Text>
+          <Text className='bind-desc'>绑定后可同步睡眠，体能电量与压力数据</Text>
+          <View className='bind-form'>
+            <Input
+              className='bind-input'
+              type='text'
+              placeholder='Garmin 邮箱'
+              value={garminEmail}
+              onInput={(event) => setGarminEmail(event.detail.value)}
+              data-testid='garmin-email-input'
+            />
+            <Input
+              className='bind-input'
+              type='text'
+              password
+              placeholder='Garmin 密码'
+              value={garminPassword}
+              onInput={(event) => setGarminPassword(event.detail.value)}
+              data-testid='garmin-password-input'
+            />
+            <View className='bind-switch'>
+              <Text>中国区账号</Text>
+              <Switch
+                checked={isCn}
+                onChange={(event) => setIsCn(event.detail.value)}
+                data-testid='garmin-is-cn-switch'
+              />
+            </View>
+          </View>
+          <Button
+            className='primary-button'
+            onClick={handleBind}
+            data-testid='bind-submit'
+          >
+            立即绑定
+          </Button>
+        </View>
+      )}
+
 
       {showPeriodModal && (
         <View className='modal-mask' onClick={() => setShowPeriodModal(false)}>

@@ -996,6 +996,82 @@ async def weekly_summary_endpoint(
         raise HTTPException(status_code=500, detail=f"周度总结生成失败: {str(e)}")
 
 
+# ==================== Garmin Profile 同步 ====================
+
+@app.post("/api/coach/sync-garmin-profile")
+async def sync_garmin_profile_endpoint(
+    db: Optional[Session] = Depends(get_db_optional),
+    current_user: WechatUser = Depends(get_current_wechat_user),
+):
+    """从 Garmin 同步用户体能数据到运动员档案（max_hr, rest_hr, vo2max, PB）。"""
+    from backend.app.utils.crypto import decrypt_text
+
+    if not db:
+        raise HTTPException(status_code=500, detail="数据库不可用")
+
+    credential = get_garmin_credential(db, wechat_user_id=current_user.id)
+    if not credential:
+        raise HTTPException(status_code=404, detail="Garmin 未绑定，请先绑定 Garmin 账号")
+
+    try:
+        garmin_password = decrypt_text(credential.garmin_password)
+        garmin_client = GarminClient(
+            email=credential.garmin_email,
+            password=garmin_password,
+            is_cn=bool(credential.is_cn),
+        )
+    except Exception as e:
+        logger.error(f"Garmin 客户端初始化失败: {e}")
+        raise HTTPException(status_code=500, detail=f"Garmin 连接失败: {str(e)}")
+
+    today_str = date.today().strftime("%Y-%m-%d")
+    synced_fields: Dict[str, Any] = {}
+
+    # 获取 max_hr, resting_hr, vo2max
+    try:
+        profile_data = garmin_client.get_user_profile_data(today_str)
+        if profile_data.get("max_heart_rate"):
+            synced_fields["max_hr"] = int(profile_data["max_heart_rate"])
+        if profile_data.get("resting_heart_rate"):
+            synced_fields["rest_hr"] = int(profile_data["resting_heart_rate"])
+        if profile_data.get("vo2_max"):
+            synced_fields["vo2max"] = float(profile_data["vo2_max"])
+
+        # 解析 PB 数据
+        prs = profile_data.get("personal_records")
+        if prs and isinstance(prs, list):
+            for pr in prs:
+                if not isinstance(pr, dict):
+                    continue
+                type_id = pr.get("personalRecordTypeId") or pr.get("typeId")
+                value = pr.get("value")
+                if type_id is None or value is None:
+                    continue
+                # Garmin PB typeId: 1=1mile, 2=3k, 3=5k, 4=10k, 5=half, 6=marathon
+                if type_id == 3:
+                    synced_fields["pb_5k_seconds"] = int(value)
+                elif type_id == 4:
+                    synced_fields["pb_10k_seconds"] = int(value)
+                elif type_id == 5:
+                    synced_fields["pb_half_seconds"] = int(value)
+                elif type_id == 6:
+                    synced_fields["pb_full_seconds"] = int(value)
+    except Exception as e:
+        logger.warning(f"Garmin profile 数据获取部分失败: {e}")
+
+    if not synced_fields:
+        return {"success": True, "message": "未能从 Garmin 获取到可同步的数据", "synced_fields": {}}
+
+    # 写入 coach_memory
+    try:
+        upsert_coach_memory(db, wechat_user_id=current_user.id, **synced_fields)
+    except Exception as e:
+        logger.error(f"Coach memory 更新失败: {e}")
+        raise HTTPException(status_code=500, detail=f"数据保存失败: {str(e)}")
+
+    return {"success": True, "message": f"已同步 {len(synced_fields)} 项数据", "synced_fields": synced_fields}
+
+
 if __name__ == "__main__":
     import uvicorn
     

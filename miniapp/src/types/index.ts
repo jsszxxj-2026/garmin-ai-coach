@@ -250,3 +250,10 @@ export type CoachProfileUpdateRequest = {
   target_finish_time_seconds?: number
   notes?: string
 }
+
+// ==================== Garmin 同步 ====================
+export interface GarminSyncResponse {
+  success: boolean
+  message: string
+  synced_fields: Record<string, number>
+}

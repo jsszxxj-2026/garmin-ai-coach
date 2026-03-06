@@ -63,10 +63,37 @@
   gap: 16px;
 }
 
-.actions {
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.feature-card {
+  background: #ffffff;
+  border-radius: 20px;
+  padding: 28px 24px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
+
+  &:active {
+    transform: scale(0.97);
+    opacity: 0.85;
+  }
+}
+
+.feature-emoji {
+  font-size: 44px;
+  line-height: 1.2;
+}
+
+.feature-title {
+  font-size: 28px;
+  font-weight: 600;
+  color: #111827;
+  margin-top: 4px;
 }
 
 .primary-button {
@@ -74,14 +101,6 @@
   color: #ffffff;
   font-size: 26px;
   border-radius: 14px;
-}
-
-.ghost-button {
-  background: #ffffff;
-  color: #2f6fed;
-  font-size: 26px;
-  border-radius: 14px;
-  border: 2px solid #d6e2ff;
 }
 
 .run-card {

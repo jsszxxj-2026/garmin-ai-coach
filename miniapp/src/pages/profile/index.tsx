@@ -4,7 +4,7 @@ import Taro from '@tarojs/taro'
 
 import Loading from '../../components/Loading'
 import Error from '../../components/Error'
-import { getCoachProfile, updateCoachProfile } from '../../api/coach'
+import { getCoachProfile, updateCoachProfile, syncGarminProfile } from '../../api/coach'
 import type { CoachProfileResponse } from '../../types'
 
 import './index.scss'
@@ -50,6 +50,7 @@ function Profile() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [syncing, setSyncing] = useState(false)
   const [form, setForm] = useState<FormData>({
     max_hr: '', rest_hr: '', vo2max: '', lthr: '', ftp: '',
     race_target: '', race_date: '',
@@ -118,6 +119,24 @@ function Profile() {
       Taro.showToast({ title: '保存失败', icon: 'none' })
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleSync = async () => {
+    setSyncing(true)
+    try {
+      const result = await syncGarminProfile()
+      if (result.success) {
+        Taro.showToast({ title: result.message, icon: 'success' })
+        // 同步后重新加载档案数据
+        await fetchData()
+      } else {
+        Taro.showToast({ title: result.message, icon: 'none' })
+      }
+    } catch {
+      Taro.showToast({ title: 'Garmin 同步失败', icon: 'none' })
+    } finally {
+      setSyncing(false)
     }
   }
 
@@ -235,6 +254,11 @@ function Profile() {
         </View>
       </View>
 
+
+      {/* Garmin 同步按钮 */}
+      <Button className='sync-btn' onClick={handleSync} disabled={syncing}>
+        {syncing ? '同步中...' : '从 Garmin 同步数据'}
+      </Button>
       <Button className='save-btn' onClick={handleSave} disabled={saving}>
         {saving ? '保存中...' : '保存档案'}
       </Button>

@@ -95,3 +95,8 @@ export const getCoachProfile = async () => {
 export const updateCoachProfile = async (payload: CoachProfileUpdateRequest) => {
   return apiClient.put<CoachProfileResponse>('/api/coach/profile', payload as unknown as Record<string, unknown>)
 }
+
+// ==================== Garmin 同步 ====================
+export const syncGarminProfile = async () => {
+  return apiClient.post<import('../types').GarminSyncResponse>('/api/coach/sync-garmin-profile')
+}

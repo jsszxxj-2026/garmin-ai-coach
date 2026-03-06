@@ -56,6 +56,21 @@
     box-sizing: border-box;
   }
 
+
+  .sync-btn {
+    background: #ffffff;
+    color: #2f6fed;
+    font-size: 28px;
+    font-weight: 600;
+    border-radius: 16px;
+    padding: 18px;
+    border: 2px solid #d6e2ff;
+    width: 100%;
+
+    &[disabled] {
+      opacity: 0.6;
+    }
+  }
   .save-btn {
     background: #2f6fed;
     color: #ffffff;
