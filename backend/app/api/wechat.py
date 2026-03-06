@@ -230,11 +230,3 @@ def get_chat_history(
             for msg in messages
         ]
     }
-def chat(
-    payload: ChatRequest,
-    _: WechatUser = Depends(get_current_wechat_user),
-    db: Session = Depends(get_db),
-) -> ChatResponse:
-    service = ChatService()
-    reply = service.reply(db=db, message=payload.message)
-    return ChatResponse(reply=reply)

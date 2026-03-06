@@ -251,3 +251,91 @@
   font-size: 26px;
   font-weight: 600;
 }
+
+/* ==================== Modal 弹窗样式 ==================== */
+.modal-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+
+.modal-content {
+  background: #ffffff;
+  border-radius: 24px;
+  padding: 32px;
+  width: 85%;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+}
+
+.modal-title {
+  font-size: 32px;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 24px;
+  display: block;
+}
+
+.modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.modal-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: #f9fafb;
+  border-radius: 16px;
+  padding: 20px;
+}
+
+.modal-label {
+  font-size: 26px;
+  color: #374151;
+  line-height: 1.6;
+}
+
+.modal-ai {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.modal-ai-title {
+  font-size: 28px;
+  font-weight: 600;
+  color: #2f6fed;
+}
+
+.modal-ai-content {
+  font-size: 26px;
+  color: #4b5563;
+  line-height: 1.6;
+}
+
+.modal-close {
+  margin-top: 24px;
+  width: 100%;
+  background: #f3f4f6;
+  color: #374151;
+  font-size: 28px;
+  font-weight: 500;
+  border-radius: 14px;
+  padding: 16px 0;
+  border: none;
+
+  &::after {
+    border: none;
+  }
+}

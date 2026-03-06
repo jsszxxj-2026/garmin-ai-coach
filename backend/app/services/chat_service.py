@@ -60,9 +60,9 @@ class ChatService:
         self,
         *,
         llm = None,
+        processor = None,
     ) -> None:
         self.gemini = llm or get_llm_service()
-        self.processor = processor or DataProcessor()
         self.processor = processor or DataProcessor()
 
     def reply(
