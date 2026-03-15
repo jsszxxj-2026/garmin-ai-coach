@@ -225,40 +225,17 @@ class GarminClient:
             result["sleep_data_error"] = str(e)
 
         # 4. 获取 Body Battery 时间序列，提取睡眠结束时的值
+        # 简化逻辑：直接取当天最大值（通常是睡眠结束起床后的恢复值）
         try:
             bb_data = self.client.get_body_battery(date_str)
             if bb_data and "bodyBatteryValuesArray" in bb_data:
                 bb_values = bb_data["bodyBatteryValuesArray"]
-                # 格式: [[timestamp_ms, value], ...]
-
-                # 获取睡眠结束时间戳（毫秒）
-                sleep_end_timestamp = result.get("sleep_end_timestamp")
-                if sleep_end_timestamp:
-                    # 如果是秒，转换为毫秒
-                    if sleep_end_timestamp < 1e12:
-                        sleep_end_timestamp_ms = sleep_end_timestamp * 1000
-                    else:
-                        sleep_end_timestamp_ms = sleep_end_timestamp
-
-                    # 找到睡眠结束后（或期间最后）的 Body Battery 值
-                    for ts, value in bb_values:
-                        if ts >= sleep_end_timestamp_ms:
-                            result["body_battery"] = value
-                            result["body_battery_source"] = "sleep_end"
-                            break
-                    else:
-                        # 如果没找到睡眠结束后的值，取最后一个值
-                        if bb_values:
-                            result["body_battery"] = bb_values[-1][1]
-                            result["body_battery_source"] = "last_value"
-                else:
-                    # 没有睡眠结束时间，取当天最大值（通常是起床后的恢复值）
-                    if bb_values:
-                        max_value = max(v[1] for v in bb_values)
-                        result["body_battery"] = max_value
-                        result["body_battery_source"] = "max_during_day"
+                if bb_values:
+                    max_value = max(v[1] for v in bb_values)
+                    result["body_battery"] = max_value
+                    result["body_battery_source"] = "max_during_day"
+                    logger.info(f"[BodyBattery] 当天最大 Body Battery: {max_value}")
         except Exception as e:
-            # 如果获取失败，保持之前从 user_summary 获取的值
             logger.debug(f"获取 Body Battery 时间序列失败: {e}")
 
         # 如果所有数据源都失败，返回 None
