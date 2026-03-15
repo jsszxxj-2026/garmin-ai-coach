@@ -13,12 +13,18 @@ from sqlalchemy.orm import Session
 
 from backend.app.db.crud import (
     get_coach_memory,
+    get_daily_summary_by_date,
     get_injury_logs,
     get_recent_weekly_reports,
     upsert_weekly_report,
+    get_activities_by_date,
 )
 from backend.app.db.models import Activity, GarminDailySummary, WeeklyReport
-from backend.app.services.coach_algorithms import calculate_acwr, calculate_confidence_score
+from backend.app.services.coach_algorithms import (
+    calculate_acwr,
+    calculate_confidence_score,
+)
+from backend.app.services.data_processor import DataProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +60,7 @@ class CoachReportService:
             llm: LLM 服务实例，需要有 chat(prompt: str) -> str 方法。
         """
         self.llm = llm
+        self.processor = DataProcessor()
 
     def build_morning_report(
         self,
@@ -80,9 +87,11 @@ class CoachReportService:
             deep_sleep_hours = 0.0
             if sleep_data.deep_sleep_seconds:
                 deep_sleep_hours = round(sleep_data.deep_sleep_seconds / 3600, 1)
-            
+
             sleep_info = {
-                "duration_hours": round(sleep_data.sleep_time_hours, 1) if sleep_data.sleep_time_hours else None,
+                "duration_hours": round(sleep_data.sleep_time_hours, 1)
+                if sleep_data.sleep_time_hours
+                else None,
                 "score": sleep_data.sleep_score,
                 "deep_sleep_hours": deep_sleep_hours,
                 "body_battery": sleep_data.body_battery,
@@ -106,7 +115,9 @@ class CoachReportService:
         )
 
         # 5. 当前活跃伤病
-        active_injuries = get_injury_logs(db, user_id=user_id, only_active=True, limit=10)
+        active_injuries = get_injury_logs(
+            db, user_id=user_id, only_active=True, limit=10
+        )
         injuries_list = [
             {
                 "body_part": inj.body_part,
@@ -120,6 +131,8 @@ class CoachReportService:
         ai_advice = ""
         if self.llm:
             prompt = self._build_morning_prompt(
+                db=db,
+                user_id=user_id,
                 sleep_info=sleep_info,
                 acwr=acwr_data,
                 confidence=confidence_data,
@@ -152,12 +165,14 @@ class CoachReportService:
             factors_list = []
             for fname, fdata in factors_dict.items():
                 if isinstance(fdata, dict):
-                    factors_list.append({
-                        "name": fname,
-                        "value": fdata.get("score", 0),
-                        "status": fdata.get("detail", ""),
-                        "change": None,
-                    })
+                    factors_list.append(
+                        {
+                            "name": fname,
+                            "value": fdata.get("score", 0),
+                            "status": fdata.get("detail", ""),
+                            "change": None,
+                        }
+                    )
             readiness = {
                 "score": readiness_score,
                 "verdict": confidence_data.get("grade", ""),
@@ -174,7 +189,9 @@ class CoachReportService:
 
     def _build_morning_prompt(
         self,
-        sleep_info: dict,
+        db: Session,
+        user_id: int,
+        sleep_info: Optional[dict],
         acwr: dict,
         confidence: dict,
         injuries: list,
@@ -202,41 +219,90 @@ class CoachReportService:
         goal_text = ""
         if target_race and target_race_date:
             days_until = (target_race_date - target_date).days
-            goal_text = f"\n目标比赛：{target_race}（{target_race_date}，还剩 {days_until} 天）"
+            goal_text = (
+                f"\n目标比赛：{target_race}（{target_race_date}，还剩 {days_until} 天）"
+            )
 
-        prompt = f"""你是专业跑步教练，请为跑者生成今日晨间训练建议。
+        # 获取近14天跑步历史数据
+        recent_runs_text = self._get_recent_runs_text(db, user_id, target_date, days=14)
 
-=== 今日状态 ===
-日期：{target_date}
-睡眠：{sleep_text}
-静息心率：{sleep_info.get('resting_hr', '-') if sleep_info else '-'} bpm
-HRV状态：{sleep_info.get('hrv_status', '-') if sleep_info else '-'}
+        # 格式化信心评分详情
+        confidence_details = f"""- 伤病因子：{confidence["factors"]["injury"]["detail"]}
+- 负荷完成因子：{confidence["factors"]["load_completion"]["detail"]}
+- 竞技状态因子：{confidence["factors"]["fitness"]["detail"]}
+- 恢复状态因子：{confidence["factors"]["recovery"]["detail"]}"""
 
-=== 训练负荷 ===
-ACWR：{acwr['acwr']:.2f}（{acwr['zone_label']}）
-急性负荷 ATL：{acwr['atl']:.0f}
-慢性负荷 CTL：{acwr['ctl']:.0f}
-最近7天负荷：{acwr.get('daily_loads_7d', [])}
+        prompt = f"""你是 **Coach Paddy**，一位专业、数据驱动的跑步教练。风格直接、有真知灼见。
 
-=== 信心评分 ===
-总分：{confidence['score']:.0f}/100（{confidence['grade']}级）
-伤病因子：{confidence['factors']['injury']['detail']}
-负荷完成因子：{confidence['factors']['load_completion']['detail']}
-竞技状态因子：{confidence['factors']['fitness']['detail']}
-恢复状态因子：{confidence['factors']['recovery']['detail']}
+## 今日身体状态（{target_date}）
+| 指标 | 值 | 状态 |
+|------|-----|------|
+| 睡眠 | {sleep_text} | {"✅" if sleep_info and sleep_info.get("score", 0) >= 80 else "⚠️" if sleep_info and sleep_info.get("score", 0) >= 60 else "🔴" if sleep_info and sleep_info else "-"} |
+| 静息心率 | {sleep_info.get("resting_hr", "-") if sleep_info else "-"} bpm | - |
+| HRV | {sleep_info.get("hrv_status", "-") if sleep_info else "-"} | - |
+| Body Battery | {sleep_info.get("body_battery", "-") if sleep_info else "-"} | {"✅" if sleep_info and sleep_info.get("body_battery", 0) >= 50 else "⚠️" if sleep_info and sleep_info.get("body_battery", 0) >= 25 else "🔴" if sleep_info and sleep_info else "-"} |
 
-=== 当前伤病 ===
+## 训练负荷
+- ACWR：{acwr["acwr"]:.2f}（{acwr["zone_label"]}）
+- ATL（急性负荷）：{acwr["atl"]:.0f}
+- CTL（慢性负荷）：{acwr["ctl"]:.0f}
+
+## 信心评分
+总分：{confidence["score"]:.0f}/100（{confidence["grade"]}级）
+{confidence_details}
+
+## 近期跑步表现
+{recent_runs_text}
+
+## 当前伤病
 {injury_text}
 {goal_text}
 
-=== 输出要求 ===
-1. 总结今日身体状态
-2. 根据 ACWR 和信心评分给出今日训练建议（跑休/轻松跑/节奏跑/间歇等）
-3. 如果有未愈伤病，给出调整建议
-4. 目标比赛倒计时训练提示（如有）
-5. 保持简洁，100-200 字
+## 输出要求
+请按照以下结构输出：
+1. **今日状态总结**：用一句话概括 + 关键指标表格
+2. **训练建议**：根据 ACWR、信心评分和近期表现，给出今日具体训练建议（跑休/轻松跑/节奏跑/间歇等）
+3. **如果有伤病**：给出调整建议
+4. **目标倒计时**：如有目标比赛，给出训练提示
+5. 保持简洁，150-250字
+6. 使用 Emoji：🏃‍♂️🔥⚡😴💪🎯
 """
         return prompt
+
+    def _get_recent_runs_text(
+        self, db: Session, user_id: int, target_date: date, days: int = 14
+    ) -> str:
+        """获取近期跑步数据的格式化文本。"""
+        start_date = target_date - timedelta(days=days)
+        runs = (
+            db.query(Activity)
+            .filter(Activity.user_id == user_id)
+            .filter(Activity.activity_date >= start_date)
+            .filter(Activity.activity_date <= target_date)
+            .filter(Activity.type.ilike("%run%"))
+            .order_by(Activity.activity_date.desc())
+            .limit(10)
+            .all()
+        )
+
+        if not runs:
+            return "近14天暂无跑步记录"
+
+        lines = []
+        for run in runs:
+            dist = run.distance_km or 0
+            dur_sec = run.duration_seconds or 0
+            dur_min = dur_sec / 60
+            pace = ""
+            if dist > 0:
+                pace_sec = dur_sec / dist
+                pace_min = int(pace_sec // 60)
+                pace_sec_int = int(pace_sec % 60)
+                pace = f"{pace_min}:{pace_sec_int:02d}/km"
+            hr = run.average_hr or "-"
+            lines.append(f"- {run.activity_date}: {dist:.1f}km, {pace}, HR {hr}")
+
+        return "\n".join(lines)
 
     def build_evening_review(
         self,
@@ -262,15 +328,19 @@ ACWR：{acwr['acwr']:.2f}（{acwr['zone_label']}）
         total_km = 0.0
         total_duration = 0.0
         for run in today_runs:
-            duration_min = (run.duration_seconds or 0) / 60 if run.duration_seconds else 0
-            runs_list.append({
-                "type": run.name or "跑步",
-                "distance_km": round(run.distance_km, 1) if run.distance_km else 0,
-                "duration_min": round(duration_min, 0),
-                "avg_pace": _seconds_to_pace(run.average_pace_seconds),
-                "avg_hr": run.average_hr,
-                "trimp": None,
-            })
+            duration_min = (
+                (run.duration_seconds or 0) / 60 if run.duration_seconds else 0
+            )
+            runs_list.append(
+                {
+                    "type": run.name or "跑步",
+                    "distance_km": round(run.distance_km, 1) if run.distance_km else 0,
+                    "duration_min": round(duration_min, 0),
+                    "avg_pace": _seconds_to_pace(run.average_pace_seconds),
+                    "avg_hr": run.average_hr,
+                    "trimp": None,
+                }
+            )
             total_km += run.distance_km or 0
             total_duration += run.duration_seconds or 0
 
@@ -306,6 +376,8 @@ ACWR：{acwr['acwr']:.2f}（{acwr['zone_label']}）
         ai_review = ""
         if self.llm and runs_list:
             prompt = self._build_evening_prompt(
+                db=db,
+                user_id=user_id,
                 runs=runs_list,
                 total_km=total_km,
                 total_duration=total_duration,
@@ -327,6 +399,8 @@ ACWR：{acwr['acwr']:.2f}（{acwr['zone_label']}）
 
     def _build_evening_prompt(
         self,
+        db: Session,
+        user_id: int,
         runs: list[dict],
         total_km: float,
         total_duration: float,
@@ -335,33 +409,52 @@ ACWR：{acwr['acwr']:.2f}（{acwr['zone_label']}）
         target_date: date,
     ) -> str:
         """组装晚间复盘的提示词。"""
-        runs_text = "\n".join([
-            f"- {r['type']}：{r['distance_km']}km，{r['duration_min']}min，配速 {r['avg_pace']}/km，心率 {r.get('avg_hr', '-')}"
-            for r in runs
-        ])
+        # 格式化今日跑步详情
+        runs_text = "\n".join(
+            [
+                f"- {r['type']}：{r['distance_km']}km，{r['duration_min']}min，配速 {r['avg_pace']}/km，心率 {r.get('avg_hr', '-')}"
+                for r in runs
+            ]
+        )
 
-        prompt = f"""你是专业跑步教练，请复盘跑者今日的训练情况。
+        # 获取近14天跑步历史数据
+        recent_runs_text = self._get_recent_runs_text(db, user_id, target_date, days=14)
 
-=== 今日训练 ===
-日期：{target_date}
+        # 格式化 Body Battery 状态
+        bb = health.get("body_battery")
+        bb_status = (
+            "✅" if bb and bb >= 50 else "⚠️" if bb and bb >= 25 else "🔴" if bb else "-"
+        )
+
+        prompt = f"""你是 **Coach Paddy**，一位专业、数据驱动的跑步教练。风格直接、有真知灼见。
+
+## 今日训练复盘（{target_date}）
 {runs_text}
 总计：{total_km:.1f}km，{_seconds_to_hms(total_duration)}
 
-=== 身体状态 ===
-身体电量：{health.get('body_battery', '-')}
-静息心率：{health.get('resting_hr', '-')} bpm
-压力指数：{health.get('stress_level', '-')}
-HRV状态：{health.get('hrv_status', '-')}
+## 身体状态
+| 指标 | 值 | 状态 |
+|------|-----|------|
+| Body Battery | {bb} | {bb_status} |
+| 静息心率 | {health.get("resting_hr", "-")} bpm | - |
+| 压力指数 | {health.get("stress_level", "-")} | - |
+| HRV | {health.get("hrv_status", "-")} | - |
 
-=== 当前负荷 ===
-ACWR：{acwr['acwr']:.2f}（{acwr['zone_label']}）
-ATL：{acwr['atl']:.0f}，CTL：{acwr['ctl']:.0f}
+## 训练负荷
+- ACWR：{acwr["acwr"]:.2f}（{acwr["zone_label"]}）
+- ATL：{acwr["atl"]:.0f}
+- CTL：{acwr["ctl"]:.0f}
 
-=== 输出要求 ===
-1. 简要点评今日训练表现
-2. 分析训练强度与身体状态是否匹配
-3. 根据当前 ACWR 给出明日训练建议
-4. 保持简洁，100-200 字
+## 近期跑步表现
+{recent_runs_text}
+
+## 输出要求
+请按照以下结构输出：
+1. **今日表现点评**：今日训练表现如何，有什么亮点或问题
+2. **身体状态分析**：Body Battery、压力等与训练强度是否匹配
+3. **明日训练建议**：根据当前 ACWR 和身体状态，给出明日具体建议
+4. 保持简洁，150-250字
+5. 使用 Emoji：🏃‍♂️🔥⚡😴💪🎯
 """
         return prompt
 
@@ -417,11 +510,13 @@ ATL：{acwr['atl']:.0f}，CTL：{acwr['ctl']:.0f}
         recent_reports = get_recent_weekly_reports(db, user_id=user_id, limit=4)
         trend: list[dict[str, Any]] = []
         for report in recent_reports:
-            trend.append({
-                "week": f"{report.week_start_date.strftime('%m/%d')}-{report.week_end_date.strftime('%m/%d')}",
-                "km": round(report.total_distance_km or 0, 1),
-                "run_count": report.run_count or 0,
-            })
+            trend.append(
+                {
+                    "week": f"{report.week_start_date.strftime('%m/%d')}-{report.week_end_date.strftime('%m/%d')}",
+                    "km": round(report.total_distance_km or 0, 1),
+                    "run_count": report.run_count or 0,
+                }
+            )
         # 逆转顺序（从远到近）
         trend.reverse()
 
@@ -429,12 +524,14 @@ ATL：{acwr['atl']:.0f}，CTL：{acwr['ctl']:.0f}
         ai_summary = ""
         if self.llm and run_count > 0:
             prompt = self._build_weekly_prompt(
+                db=db,
+                user_id=user_id,
                 week_start=week_start,
                 week_end=week_end,
                 run_count=run_count,
                 total_km=total_km,
                 total_duration=total_duration,
-                avg_pace=avg_pace_seconds,
+                avg_pace_seconds=avg_pace_seconds,
                 acwr=acwr_data,
                 confidence=confidence_data,
                 trend=trend,
@@ -467,13 +564,19 @@ ATL：{acwr['atl']:.0f}，CTL：{acwr['ctl']:.0f}
             db.rollback()
 
         # 构建 weekly_stats
-        weekly_stats: Optional[dict[str, Any]] = {
-            "total_distance_km": round(total_km, 1),
-            "run_count": run_count,
-            "total_duration_min": round(total_duration / 60, 0) if total_duration else 0,
-            "avg_pace": _seconds_to_pace(avg_pace_seconds),
-            "avg_hr": None,
-        } if run_count > 0 else None
+        weekly_stats: Optional[dict[str, Any]] = (
+            {
+                "total_distance_km": round(total_km, 1),
+                "run_count": run_count,
+                "total_duration_min": round(total_duration / 60, 0)
+                if total_duration
+                else 0,
+                "avg_pace": _seconds_to_pace(avg_pace_seconds),
+                "avg_hr": None,
+            }
+            if run_count > 0
+            else None
+        )
 
         # 构建 load_trend（从 acwr_data 提取）
         load_trend: Optional[dict[str, Any]] = None
@@ -491,11 +594,13 @@ ATL：{acwr['atl']:.0f}，CTL：{acwr['ctl']:.0f}
             factors_list = []
             for fname, fdata in factors_dict.items():
                 if isinstance(fdata, dict):
-                    factors_list.append({
-                        "name": fname,
-                        "score": fdata.get("score", 0),
-                        "detail": fdata.get("detail", ""),
-                    })
+                    factors_list.append(
+                        {
+                            "name": fname,
+                            "score": fdata.get("score", 0),
+                            "detail": fdata.get("detail", ""),
+                        }
+                    )
             confidence_score_out = {
                 "score": confidence_data["score"],
                 "label": confidence_data.get("grade", ""),
@@ -514,6 +619,8 @@ ATL：{acwr['atl']:.0f}，CTL：{acwr['ctl']:.0f}
 
     def _build_weekly_prompt(
         self,
+        db: Session,
+        user_id: int,
         week_start: date,
         week_end: date,
         run_count: int,
@@ -527,40 +634,59 @@ ATL：{acwr['atl']:.0f}，CTL：{acwr['ctl']:.0f}
     ) -> str:
         """组装周度总结的提示词。"""
         # 趋势格式化
-        trend_text = "\n".join([f"- {t['week']}: {t['km']}km（{t['run_count']}次）" for t in trend]) or "无历史数据"
+        trend_text = (
+            "\n".join(
+                [f"- {t['week']}: {t['km']}km（{t['run_count']}次）" for t in trend]
+            )
+            or "无历史数据"
+        )
 
         goal_text = ""
         if weekly_goal:
             goal_pct = total_km / weekly_goal * 100
             goal_text = f"\n周跑量目标：{weekly_goal}km（当前 {goal_pct:.0f}%）"
 
-        prompt = f"""你是专业跑步教练，请为跑者生成本周训练总结。
+        # 获取近30天跑步历史数据
+        recent_runs_text = self._get_recent_runs_text(db, user_id, week_end, days=30)
 
-=== 本周概况 ===
-周期：{week_start} - {week_end}
-跑步次数：{run_count} 次
-总跑量：{total_km:.1f} km
-总时长：{_seconds_to_hms(total_duration)}
-平均配速：{_seconds_to_pace(avg_pace_seconds)}/km{goal_text}
+        # 格式化信心评分详情
+        confidence_details = f"""- 伤病因子：{confidence["factors"]["injury"]["detail"]}
+- 负荷完成因子：{confidence["factors"]["load_completion"]["detail"]}
+- 竞技状态因子：{confidence["factors"]["fitness"]["detail"]}
+- 恢复状态因子：{confidence["factors"]["recovery"]["detail"]}"""
 
-=== 负荷状态 ===
-ACWR：{acwr['acwr']:.2f}（{acwr['zone_label']}）
-ATL：{acwr['atl']:.0f}，CTL：{acwr['ctl']:.0f}
+        prompt = f"""你是 **Coach Paddy**，一位专业、数据驱动的跑步教练。风格直接、有真知灼见。
 
-=== 信心评分 ===
-总分：{confidence['score']}/100（{confidence['grade']}级）
-伤病：{confidence['factors']['injury']['detail']}
-负荷完成：{confidence['factors']['load_completion']['detail']}
-竞技状态：{confidence['factors']['fitness']['detail']}
-恢复状态：{confidence['factors']['recovery']['detail']}
+## 本周训练概况（{week_start} - {week_end}）
+| 指标 | 值 |
+|------|-----|
+| 跑步次数 | {run_count} 次 |
+| 总跑量 | {total_km:.1f} km |
+| 总时长 | {_seconds_to_hms(total_duration)} |
+| 平均配速 | {_seconds_to_pace(avg_pace_seconds)}/km |
+{goal_text}
 
-=== 历史趋势 ===
+## 训练负荷
+- ACWR：{acwr["acwr"]:.2f}（{acwr["zone_label"]}）
+- ATL：{acwr["atl"]:.0f}
+- CTL：{acwr["ctl"]:.0f}
+
+## 信心评分
+总分：{confidence["score"]}/100（{confidence["grade"]}级）
+{confidence_details}
+
+## 历史趋势（近几周）
 {trend_text}
 
-=== 输出要求 ===
-1. 总结本周训练表现（亮点与不足）
-2. 根据 ACWR 和信心评分分析当前训练状态
-3. 为下周训练给出具体建议（休整/渐进/维持/减量）
-4. 保持简洁，150-300 字
+## 近期跑步表现（近30天）
+{recent_runs_text}
+
+## 输出要求
+请按照以下结构输出：
+1. **本周总结**：本周表现如何，亮点与不足
+2. **训练状态分析**：根据 ACWR 和信心评分分析当前状态
+3. **下周训练建议**：具体建议（休整/渐进/维持/减量），具体到跑量或训练类型
+4. 保持简洁，150-300字
+5. 使用 Emoji：🏃‍♂️🔥⚡😴💪🎯
 """
         return prompt
