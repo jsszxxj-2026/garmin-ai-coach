@@ -344,11 +344,12 @@ class CoachReportService:
             total_km += run.distance_km or 0
             total_duration += run.duration_seconds or 0
 
-        # 2. 获取今日健康数据
+        # 2. 获取昨日健康数据（昨晚睡眠，用于评估今日恢复）
+        yesterday = target_date - timedelta(days=1)
         health_data = (
             db.query(GarminDailySummary)
             .filter(GarminDailySummary.user_id == user_id)
-            .filter(GarminDailySummary.summary_date == target_date)
+            .filter(GarminDailySummary.summary_date == yesterday)
             .one_or_none()
         )
 
