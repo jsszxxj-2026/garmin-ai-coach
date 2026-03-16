@@ -225,44 +225,34 @@ class GarminClient:
             result["sleep_data_error"] = str(e)
 
         # 4. 获取 Body Battery 时间序列
-        # Garmin 的 Body Battery 从前一天早上6点开始计算
-        # 需要同时查询昨天和今天的数据，取最高值
+        # get_body_battery() 返回 list，每个元素包含一天的 body battery 数据
         try:
-            from datetime import timedelta
+            bb_list = self.client.get_body_battery(date_str)
+            if bb_list and isinstance(bb_list, list) and len(bb_list) > 0:
+                # 获取第一天的数据（通常是今天）
+                bb_data = bb_list[0]
+                if isinstance(bb_data, dict):
+                    # 优先使用 bodyBatteryAtWakeTime（起床时的值）
+                    wake_bb = bb_data.get("bodyBatteryAtWakeTime")
+                    highest_bb = bb_data.get("bodyBatteryHighestValue")
+                    charged_bb = bb_data.get("charged")
 
-            yesterday_str = (
-                datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=1)
-            ).strftime("%Y-%m-%d")
-
-            max_bb = None
-            bb_source = None
-
-            # 先尝试昨天的数据
-            bb_data_yesterday = self.client.get_body_battery(yesterday_str)
-            if bb_data_yesterday and "bodyBatteryValuesArray" in bb_data_yesterday:
-                bb_values = bb_data_yesterday["bodyBatteryValuesArray"]
-                if bb_values:
-                    max_bb = max(v[1] for v in bb_values)
-                    bb_source = f"yesterday_max"
-                    logger.info(f"[BodyBattery] 昨天最大: {max_bb}")
-
-            # 再尝试今天的数据
-            bb_data_today = self.client.get_body_battery(date_str)
-            if bb_data_today and "bodyBatteryValuesArray" in bb_data_today:
-                bb_values_today = bb_data_today["bodyBatteryValuesArray"]
-                if bb_values_today:
-                    today_max = max(v[1] for v in bb_values_today)
-                    logger.info(f"[BodyBattery] 今天最大: {today_max}")
-                    if max_bb is None or today_max > max_bb:
-                        max_bb = today_max
-                        bb_source = "today_max"
-
-            if max_bb is not None:
-                result["body_battery"] = max_bb
-                result["body_battery_source"] = bb_source
-                logger.info(
-                    f"[BodyBattery] 最终 Body Battery: {max_bb} (来源: {bb_source})"
-                )
+                    if wake_bb is not None:
+                        result["body_battery"] = wake_bb
+                        result["body_battery_source"] = "wake_time"
+                        logger.info(f"[BodyBattery] 使用起床时 Body Battery: {wake_bb}")
+                    elif highest_bb is not None:
+                        result["body_battery"] = highest_bb
+                        result["body_battery_source"] = "highest_value"
+                        logger.info(
+                            f"[BodyBattery] 使用最高 Body Battery: {highest_bb}"
+                        )
+                    elif charged_bb is not None:
+                        result["body_battery"] = charged_bb
+                        result["body_battery_source"] = "charged"
+                        logger.info(
+                            f"[BodyBattery] 使用充电值 Body Battery: {charged_bb}"
+                        )
         except Exception as e:
             logger.debug(f"获取 Body Battery 时间序列失败: {e}")
 
