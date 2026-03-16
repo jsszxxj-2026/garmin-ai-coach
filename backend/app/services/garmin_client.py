@@ -232,11 +232,23 @@ class GarminClient:
                 # 获取第一天的数据（通常是今天）
                 bb_data = bb_list[0]
                 if isinstance(bb_data, dict):
-                    # 优先使用 bodyBatteryAtWakeTime（起床时的值）
+                    # 方法1: 优先使用 bodyBatteryAtWakeTime（起床时的值）
                     wake_bb = bb_data.get("bodyBatteryAtWakeTime")
+                    # 方法2: 使用 bodyBatteryHighestValue
                     highest_bb = bb_data.get("bodyBatteryHighestValue")
+                    # 方法3: 从时间序列数组中计算最高值
+                    bb_values = bb_data.get("bodyBatteryValuesArray", [])
+                    max_from_array = None
+                    if bb_values and isinstance(bb_values, list):
+                        max_from_array = max(
+                            v[1]
+                            for v in bb_values
+                            if isinstance(v, (list, tuple)) and len(v) >= 2
+                        )
+                    # 方法4: charged 值
                     charged_bb = bb_data.get("charged")
 
+                    # 优先顺序: wake > highest > array_max > charged
                     if wake_bb is not None:
                         result["body_battery"] = wake_bb
                         result["body_battery_source"] = "wake_time"
@@ -246,6 +258,12 @@ class GarminClient:
                         result["body_battery_source"] = "highest_value"
                         logger.info(
                             f"[BodyBattery] 使用最高 Body Battery: {highest_bb}"
+                        )
+                    elif max_from_array is not None:
+                        result["body_battery"] = max_from_array
+                        result["body_battery_source"] = "array_max"
+                        logger.info(
+                            f"[BodyBattery] 使用数组最高值 Body Battery: {max_from_array}"
                         )
                     elif charged_bb is not None:
                         result["body_battery"] = charged_bb
