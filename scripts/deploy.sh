@@ -78,6 +78,11 @@ cd $PROJECT_DIR || {
 # 3. 拉取最新代码
 # -----------------------------------------------------------------------------
 log_info "从 GitHub 拉取最新代码..."
+
+# 切换为 HTTPS 方式（避免 SSH 权限问题）
+log_info "配置 Git 使用 HTTPS..."
+git remote set-url origin https://github.com/jsszxxj-2026/garmin-ai-coach.git 2>/dev/null || true
+
 git fetch origin
 
 # 检查是否有更新
