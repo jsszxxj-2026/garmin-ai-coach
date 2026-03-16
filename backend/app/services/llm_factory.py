@@ -1,6 +1,6 @@
 """
 LLM Factory
-根据配置动态选择 LLM 服务（DeepSeek 或 Gemini）。
+根据配置动态选择 LLM 服务（DeepSeek、SiliconFlow 或 Gemini）。
 """
 
 from __future__ import annotations
@@ -12,8 +12,8 @@ from src.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# 类型别名：LLM 服务实例（DeepSeekService 或 GeminiService，接口一致）
-LLMService = Union["DeepSeekService", "GeminiService"]  # noqa: F821
+# 类型别名：LLM 服务实例（DeepSeekService、SiliconFlowService 或 GeminiService，接口一致）
+LLMService = Union["DeepSeekService", "SiliconFlowService", "GeminiService"]  # noqa: F821
 
 
 def get_llm_service(model_name: Optional[str] = None) -> LLMService:
@@ -24,7 +24,7 @@ def get_llm_service(model_name: Optional[str] = None) -> LLMService:
         model_name: 可选的模型名覆盖
 
     Returns:
-        DeepSeekService 或 GeminiService 实例（接口一致）
+        DeepSeekService、SiliconFlowService 或 GeminiService 实例（接口一致）
 
     Raises:
         ValueError: 如果 LLM_PROVIDER 不支持
@@ -37,6 +37,12 @@ def get_llm_service(model_name: Optional[str] = None) -> LLMService:
         logger.info("[LLM Factory] 使用 DeepSeek 服务")
         return DeepSeekService(model_name=model_name)
 
+    elif provider == "siliconflow":
+        from backend.app.services.siliconflow_service import SiliconFlowService
+
+        logger.info("[LLM Factory] 使用 SiliconFlow (硅基流动) 服务")
+        return SiliconFlowService(model_name=model_name)
+
     elif provider == "gemini":
         from backend.app.services.gemini_service import GeminiService
 
@@ -46,5 +52,5 @@ def get_llm_service(model_name: Optional[str] = None) -> LLMService:
     else:
         raise ValueError(
             f"不支持的 LLM_PROVIDER: '{provider}'，"
-            "请在 .env 中设置为 'deepseek' 或 'gemini'"
+            "请在 .env 中设置为 'deepseek'、'siliconflow' 或 'gemini'"
         )

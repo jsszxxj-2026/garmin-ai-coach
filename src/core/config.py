@@ -1,6 +1,7 @@
 """
 Application Configuration
 """
+
 from typing import Optional
 
 from pydantic_settings import BaseSettings
@@ -10,8 +11,12 @@ class Settings(BaseSettings):
     GARMIN_EMAIL: str
     GARMIN_PASSWORD: str
     GEMINI_API_KEY: Optional[str] = None  # 保留兼容，可选
-    GARMIN_IS_CN: bool = False  # True = connect.garmin.cn（中国），False = connect.garmin.com（国际）
-    PROXY_URL: Optional[str] = None  # 代理 URL，用于访问 Google API（例如：http://127.0.0.1:7890）
+    GARMIN_IS_CN: bool = (
+        False  # True = connect.garmin.cn（中国），False = connect.garmin.com（国际）
+    )
+    PROXY_URL: Optional[str] = (
+        None  # 代理 URL，用于访问 Google API（例如：http://127.0.0.1:7890）
+    )
 
     # WeChat mini program
     WECHAT_MINI_APPID: Optional[str] = None
@@ -26,7 +31,9 @@ class Settings(BaseSettings):
     GARMIN_CRED_ENCRYPTION_KEY: Optional[str] = None
 
     # Database
-    DATABASE_URL: Optional[str] = None  # e.g. mysql+pymysql://user:pass@host:3306/db?charset=utf8mb4
+    DATABASE_URL: Optional[str] = (
+        None  # e.g. mysql+pymysql://user:pass@host:3306/db?charset=utf8mb4
+    )
 
     # Gemini
     GEMINI_LIST_MODELS: bool = False  # 调试用：启动时列出可用模型
@@ -36,14 +43,20 @@ class Settings(BaseSettings):
     DEEPSEEK_API_KEY: Optional[str] = None
     DEEPSEEK_MODEL_NAME: str = "deepseek-reasoner"  # R1 推理模型
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
-    LLM_PROVIDER: str = "deepseek"  # "deepseek" 或 "gemini"
+
+    # 硅基流动 (Silicon Flow) - DeepSeek V3.2
+    SILICONFLOW_API_KEY: Optional[str] = None
+    SILICONFLOW_MODEL_NAME: str = "deepseek-ai/DeepSeek-V3.2"
+    SILICONFLOW_BASE_URL: str = "https://api.siliconflow.cn/v1"
+
+    LLM_PROVIDER: str = "deepseek"  # "deepseek", "siliconflow", 或 "gemini"
     # Runtime behavior
     USE_MOCK_MODE: bool = False
     ANALYSIS_CACHE_HOURS: int = 24
     ENABLE_GARMIN_POLLING: bool = False
     GARMIN_POLL_INTERVAL_MINUTES: int = 30
     INITIAL_BIND_BACKFILL_DAYS: int = 30
-    
+
     class Config:
         env_file = ".env"
         extra = "ignore"  # 忽略多余的配置项
