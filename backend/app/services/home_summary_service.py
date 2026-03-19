@@ -206,9 +206,9 @@ class HomeSummaryService:
 
         provider = settings.LLM_PROVIDER.lower()
         if provider == "deepseek":
-            key = getattr(settings, 'DEEPSEEK_API_KEY', None)
+            key = getattr(settings, "DEEPSEEK_API_KEY", None)
         else:
-            key = getattr(settings, 'GEMINI_API_KEY', None)
+            key = getattr(settings, "GEMINI_API_KEY", None)
         if not key or not key.strip():
             logger.info(f"[HomeSummary] {provider} API key missing; skip AI brief")
             return False
@@ -295,7 +295,7 @@ class HomeSummaryService:
             db, user_id=user.id, start_date=window_start, end_date=today
         )
         run_count = len(runs_30)
-        ai_brief: Dict[str, Optional[str]] | None = None
+        ai_brief: Optional[Dict[str, Optional[str]]] = None
         if include_ai_brief:
             ai_brief = self._build_ai_brief(
                 run_count=run_count,
